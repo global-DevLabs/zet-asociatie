@@ -13,6 +13,8 @@ import { UMUnitsProvider } from "@/lib/um-units-store";
 import { QuickCashinProvider } from "@/lib/quick-cashin-context";
 import { QuickCashinModal } from "@/components/payments/quick-cashin-modal";
 
+export const dynamic = 'force-dynamic';
+
 function DataProviders({ children }: { children: React.ReactNode }) {
   return (
     <AuditLogProvider>
