@@ -12,6 +12,8 @@ import { useAuth } from "@/lib/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Lock } from "lucide-react"
 
+export const dynamic = 'force-dynamic'
+
 function SettingsPageContent() {
   const { ranks, profiles, paymentMethods, updateRanks, updateProfiles, updatePaymentMethods } = useSettings()
   const { hasPermission } = useAuth()

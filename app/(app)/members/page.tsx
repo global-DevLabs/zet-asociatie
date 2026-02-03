@@ -3,6 +3,8 @@
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react"; // Declare the Search variable
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { PageContainer } from "@/components/layout/page-container";

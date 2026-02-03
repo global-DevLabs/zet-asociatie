@@ -2,6 +2,8 @@
 
 import { Suspense, useState, useMemo, useEffect } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
+
+export const dynamic = 'force-dynamic'
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

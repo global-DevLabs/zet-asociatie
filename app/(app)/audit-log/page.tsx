@@ -2,6 +2,8 @@
 
 import { useState, useMemo, Suspense } from "react"
 import { useRouter } from "next/navigation"
+
+export const dynamic = 'force-dynamic'
 import { useAuth } from "@/lib/auth-context"
 import { useAuditLogs } from "@/lib/audit-log-store"
 import { PageContainer } from "@/components/layout/page-container"

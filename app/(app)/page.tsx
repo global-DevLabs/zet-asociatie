@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { PageContainer } from "@/components/layout/page-container"
+
+export const dynamic = 'force-dynamic'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, UserMinus, Wallet, TrendingUp, ArrowUpRight, PieChart, Building2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"

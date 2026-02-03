@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
+
+export const dynamic = 'force-dynamic'
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"

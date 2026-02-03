@@ -5,6 +5,8 @@ import { PageContainer } from "@/components/layout/page-container"
 import { MemberDetailView } from "@/components/members/member-detail-view"
 import { ProtectedRoute } from "@/components/layout/protected-route"
 
+export const dynamic = 'force-dynamic'
+
 function NewMemberPageContent() {
   return (
     <div className="min-h-screen bg-background">

@@ -2,6 +2,8 @@
 
 import { use, useState, Suspense } from "react"
 import { useRouter } from "next/navigation"
+
+export const dynamic = 'force-dynamic'
 import { notFound } from "next/navigation"
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"

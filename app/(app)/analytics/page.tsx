@@ -2,6 +2,8 @@
 
 import { Suspense, useState, useMemo, useEffect } from "react"
 import { AppSidebar } from "@/components/layout/app-sidebar"
+
+export const dynamic = 'force-dynamic'
 import { PageContainer } from "@/components/layout/page-container"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

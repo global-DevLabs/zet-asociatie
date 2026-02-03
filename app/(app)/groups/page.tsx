@@ -2,6 +2,8 @@
 
 import { useState, Suspense } from "react"
 import { PageContainer } from "@/components/layout/page-container"
+
+export const dynamic = 'force-dynamic'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"

@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from "react"
 import { notFound, useRouter } from "next/navigation"
+
+export const dynamic = 'force-dynamic'
 import { PageContainer } from "@/components/layout/page-container"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
