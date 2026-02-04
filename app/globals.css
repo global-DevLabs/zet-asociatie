@@ -1,47 +1,45 @@
-@import "tailwindcss";
-
-@import "tw-animate-css";
-
-@custom-variant dark (&:is(.dark *));
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: hsl(0 0% 100%); /* #F8FAFC - light grey background */
-  --foreground: hsl(222.2 84% 4.9%); /* #111827 - near black */
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
 
-  --card: hsl(0 0% 100%); /* Pure white cards with shadow */
+  --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
 
-  --popover: hsl(0 0% 100%);
+  --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: hsl(221.2 83.2% 53.3%); /* #2563EB - premium blue */
+  --primary: 221.2 83.2% 53.3%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: hsl(210 40% 96%);
+  --secondary: 210 40% 96%;
   --secondary-foreground: 222 47% 11%;
 
-  --muted: hsl(210 40% 96%); /* #F3F4F6 */
-  --muted-foreground: 220 9% 46%; /* #6B7280 - softer gray for labels */
+  --muted: 210 40% 96%;
+  --muted-foreground: 220 9% 46%;
 
-  --accent: hsl(210 40% 96%);
+  --accent: 210 40% 96%;
   --accent-foreground: 0 0% 100%;
 
-  --destructive: hsl(0 84.2% 60.2%);
+  --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: hsl(214.3 31.8% 91.4%);
-  --input: hsl(214.3 31.8% 91.4%);
-  --ring: hsl(221.2 83.2% 53.3%);
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
 
-  --radius: 0.625rem; /* 10px - modern rounded corners */
+  --radius: 0.625rem;
 
-  --chart-1: hsl(221.2 83.2% 53.3%);
-  --chart-2: hsl(212 95% 68%);
-  --chart-3: hsl(216 92% 60%);
-  --chart-4: hsl(210 98% 78%);
-  --chart-5: hsl(212 97% 87%);
+  --chart-1: 221.2 83.2% 53.3%;
+  --chart-2: 212 95% 68%;
+  --chart-3: 216 92% 60%;
+  --chart-4: 210 98% 78%;
+  --chart-5: 212 97% 87%;
 
-  --sidebar: hsl(0 0% 98%);
+  --sidebar: 0 0% 98%;
   --sidebar-foreground: 222 47% 11%;
   --sidebar-primary: 221 83% 53%;
   --sidebar-primary-foreground: 0 0% 100%;
@@ -90,63 +88,10 @@
   --sidebar-ring: 221 83% 53%;
 }
 
-@theme inline {
-  --font-sans:
-    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "SF Mono", "Monaco", "Cascadia Code", monospace;
-
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-}
-
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+    outline-color: hsl(var(--ring) / 0.5);
   }
 
   body {
@@ -187,8 +132,6 @@
 }
 
 @layer components {
-  /* Suppress ResizeObserver errors at the CSS level by stabilizing layouts */
-  /* Apply only to leaf/content elements, not structural wrappers */
   .card,
   table,
   [role="tabpanel"],
@@ -197,7 +140,6 @@
     contain: layout style;
   }
 
-  /* Ensure fixed/absolute elements and their ancestors don't have containment */
   html,
   body,
   body > *,
@@ -220,7 +162,6 @@
     box-shadow:
       0 1px 3px 0 rgb(0 0 0 / 0.1),
       0 1px 2px -1px rgb(0 0 0 / 0.1);
-    /* Removed transform transitions that cause resize loops */
     transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -228,7 +169,6 @@
     box-shadow:
       0 10px 15px -3px rgb(0 0 0 / 0.1),
       0 4px 6px -4px rgb(0 0 0 / 0.1);
-    /* Removed transform that triggers resize */
   }
 
   .table-row-hover {
@@ -239,7 +179,6 @@
     background-color: hsl(var(--muted) / 0.3);
   }
 
-  /* Removed button transform animations that cause resize loops */
   button {
     transition:
       background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -275,7 +214,6 @@
     transform: scale(1.05);
   }
 
-  /* Enhanced dropdown z-index and solid backgrounds to prevent visual bleeding */
   [data-radix-popper-content-wrapper] {
     z-index: 60 !important;
     isolation: isolate !important;
@@ -300,7 +238,6 @@
     background: #1a1f2e !important;
   }
 
-  /* Fixed sheet (filter panel) z-index stacking */
   [data-slot="sheet-overlay"] {
     z-index: 40 !important;
     background: rgba(15, 23, 42, 0.45) !important;
@@ -316,7 +253,6 @@
     background: #1a1f2e !important;
   }
 
-  /* Ensure dropdowns render above everything */
   [role="listbox"] {
     z-index: 60 !important;
     background: #ffffff !important;
@@ -345,7 +281,6 @@
     background: #1a1f2e !important;
   }
 
-  /* Prevent body scroll when modals are open - but don't affect fixed elements like sidebar */
   body:has([data-slot="sheet-content"]),
   body:has([data-slot="dialog-content"]),
   body:has([data-state="open"][role="dialog"]) {

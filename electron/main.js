@@ -97,8 +97,19 @@ function startNextStandaloneServer() {
     return;
   }
 
-  const standaloneDir = path.join(process.cwd(), ".next", "standalone");
+  // Packaged app: use app path (works from Finder/Launchpad). Dev/build: use cwd.
+  let appRoot = app.isPackaged ? app.getAppPath() : process.cwd();
+  // Standalone is unpacked from asar so it must be read from app.asar.unpacked.
+  if (app.isPackaged && appRoot.includes("app.asar")) {
+    appRoot = appRoot.replace("app.asar", "app.asar.unpacked");
+  }
+  const standaloneDir = path.join(appRoot, ".next", "standalone");
   const serverEntry = path.join(standaloneDir, "server.js");
+
+  if (!fs.existsSync(serverEntry)) {
+    console.error("[electron] Next server not found:", serverEntry);
+    return;
+  }
 
   const config = loadConfig();
   const env = {
@@ -108,6 +119,8 @@ function startNextStandaloneServer() {
     LOCAL_DB_URL: config?.localDbUrl || process.env.LOCAL_DB_URL,
     JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET,
     ENCRYPTION_SALT: config?.encryptionSalt || process.env.ENCRYPTION_SALT,
+    // Run Electron executable as Node so server.js runs correctly on macOS/Windows.
+    ELECTRON_RUN_AS_NODE: "1",
   };
 
   nextServerProcess = spawn(process.execPath, [serverEntry], {
@@ -116,10 +129,14 @@ function startNextStandaloneServer() {
     stdio: "inherit",
   });
 
+  nextServerProcess.on("error", (err) => {
+    console.error("[electron] Failed to start Next server:", err);
+    nextServerProcess = null;
+  });
+
   nextServerProcess.on("exit", (code) => {
     nextServerProcess = null;
-    if (!isDev && code !== 0) {
-      // In production, quit the app if the server crashes.
+    if (!isDev && code !== 0 && code !== null) {
       app.quit();
     }
   });

@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "next build --webpack",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
     "migrate:local": "node scripts/migrate.js",
     "electron:dev": "electron ./electron/main.js",
     "electron:build": "electron-builder -w",
-    "electron:pack": "electron-builder --dir -w"
+    "electron:build:mac": "electron-builder --mac",
+    "electron:pack": "electron-builder --dir -w",
+    "electron:pack:mac": "electron-builder --dir --mac"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -69,18 +71,16 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0",
-    "@tailwindcss/postcss": "^4.1.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22",
     "@types/pg": "^8.11.10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "postcss": "^8.5",
-    "tailwindcss": "^4.1.9",
-    "tw-animate-css": "1.3.3",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5"
   },
   "build": {
@@ -107,6 +107,9 @@
           "**/*"
         ]
       }
+    ],
+    "asarUnpack": [
+      ".next/standalone/**"
     ],
     "extraMetadata": {
       "main": "electron/main.js"

@@ -66,16 +66,24 @@ npm run electron:build     # electron-builder for Windows x64
 
 Output: `dist-electron/` (e.g. NSIS installer).
 
-### Building for macOS
+### Building for macOS (DMG)
 
 Do this **on a Mac**. electron-builder cannot produce valid macOS apps when run on Windows.
 
 ```bash
-npm run build
-npm run electron:build     # or: npx electron-builder --mac
+npm run build                  # Next.js production build
+npm run electron:build:mac     # Creates .dmg (and .app) in dist-electron/
 ```
 
-Output: `dist-electron/` (e.g. `.dmg` or `.app`). Postgres bundling in this repo is set up for Windows; on Mac you’ll use a system or Homebrew Postgres or env config.
+Or unpacked app only (no installer):
+
+```bash
+npm run electron:pack:mac      # dist-electron/mac-unpacked/Zet Asociatie.app
+```
+
+Output: `dist-electron/` — e.g. `Zet Asociatie-0.1.0.dmg` and `Zet Asociatie.app`. Postgres bundling in this repo is set up for Windows; on Mac use a system or Homebrew Postgres or env config.
+
+**If `npm run build` fails with a Tailwind error** (e.g. `E.map is not a function` in `globals.css`), try: `rm -rf .next node_modules/.cache` and run `npm run build` again. If it still fails, it may be a Tailwind 4 + Next 16 compatibility issue in this environment; run the build on another machine or in CI.
 
 ### Troubleshooting: "ffmpeg.dll was not found"
 
