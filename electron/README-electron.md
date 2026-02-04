@@ -24,10 +24,11 @@ If `resources/postgres-win` only contains the README (no binaries), the app stil
 
 ### Running in development
 
-1. Start Next.js: `npm run dev`
-2. Start Electron: `npm install --save-dev electron electron-builder --legacy-peer-deps` then `npm run electron:dev`
+1. **Env and DB:** From the project root, run `node scripts/generate-env.js` to create `.env.local` with `LOCAL_DB_URL`, `JWT_SECRET`, and `ENCRYPTION_SALT`. Create the DB (`createdb zet_asociatie`), then `npm run migrate:local`. See main README for full steps.
+2. Start Next.js: `npm run dev`
+3. Start Electron: `npm install --save-dev electron electron-builder --legacy-peer-deps` then `npm run electron:dev`
 
-Postgres is not started in dev unless you set `POSTGRES_BIN` and `POSTGRES_DATA_DIR` (or have run the packaged app once so config exists).
+Postgres is not started by Electron in dev unless you set `POSTGRES_BIN` and `POSTGRES_DATA_DIR` (or have run the packaged app once so config exists). Use a local Postgres instance and `.env.local` for development.
 
 ### Building the Windows installer
 

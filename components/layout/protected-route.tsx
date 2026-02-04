@@ -6,8 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAuth();
 
-  // Proxy handles server-side protection and redirects
-  // This component just shows loading state while auth initializes client-side
+  // Middleware verifies auth and redirects to /login when needed.
+  // This component shows loading state while auth initializes client-side.
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -19,6 +19,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If we reach here, proxy already verified auth - render children
+  // If we reach here, middleware already verified auth - render children
   return <>{children}</>;
 }

@@ -1,332 +1,181 @@
-"use client"
+"use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
-import type { Activity, ActivityType, ActivityParticipant, ActivityParticipantStatus, ActivityStatus } from "@/types"
-import { AuditLogger } from "@/lib/audit-logger"
-import { useAuth } from "@/lib/auth-context"
-import { createBrowserClient } from "@/lib/supabase/client"
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from "react";
+import type {
+  Activity,
+  ActivityType,
+  ActivityParticipant,
+  ActivityParticipantStatus,
+  ActivityStatus,
+} from "@/types";
+import { AuditLogger } from "@/lib/audit-logger";
+import { useAuth } from "@/lib/auth-context";
 
 interface ActivitiesContextType {
-  activities: Activity[]
-  activityTypes: ActivityType[]
-  isLoading: boolean
-  error: string | null
-  createActivity: (activity: Omit<Activity, "id" | "created_at" | "updated_at" | "status">) => Promise<Activity>
-  updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>
-  deleteActivity: (id: string) => Promise<void>
-  archiveActivity: (id: string) => Promise<void>
-  reactivateActivity: (id: string) => Promise<void>
-  getActivityById: (id: string) => Activity | undefined
-  addParticipants: (activityId: string, memberIds: string[]) => Promise<void>
-  updateParticipant: (activityId: string, memberId: string, updates: Partial<Pick<ActivityParticipant, "status" | "note">>) => Promise<void>
-  removeParticipant: (activityId: string, memberId: string) => Promise<void>
-  getParticipants: (activityId: string) => ActivityParticipant[]
-  getMemberActivities: (memberId: string) => Activity[]
-  refreshActivities: () => Promise<void>
-  updateActivityTypes: (types: ActivityType[]) => void
-  createActivityType: (type: Omit<ActivityType, "id" | "created_at" | "updated_at">) => Promise<ActivityType>
-  updateActivityType: (id: string, updates: Partial<ActivityType>) => Promise<void>
-  deleteActivityType: (id: string) => Promise<void>
+  activities: Activity[];
+  activityTypes: ActivityType[];
+  isLoading: boolean;
+  error: string | null;
+  createActivity: (
+    activity: Omit<Activity, "id" | "created_at" | "updated_at" | "status">
+  ) => Promise<Activity>;
+  updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
+  deleteActivity: (id: string) => Promise<void>;
+  archiveActivity: (id: string) => Promise<void>;
+  reactivateActivity: (id: string) => Promise<void>;
+  getActivityById: (id: string) => Activity | undefined;
+  addParticipants: (activityId: string, memberIds: string[]) => Promise<void>;
+  updateParticipant: (
+    activityId: string,
+    memberId: string,
+    updates: Partial<Pick<ActivityParticipant, "status" | "note">>
+  ) => Promise<void>;
+  removeParticipant: (activityId: string, memberId: string) => Promise<void>;
+  getParticipants: (activityId: string) => ActivityParticipant[];
+  getMemberActivities: (memberId: string) => Activity[];
+  refreshActivities: () => Promise<void>;
+  updateActivityTypes: (types: ActivityType[]) => void;
+  createActivityType: (
+    type: Omit<ActivityType, "id" | "created_at" | "updated_at">
+  ) => Promise<ActivityType>;
+  updateActivityType: (id: string, updates: Partial<ActivityType>) => Promise<void>;
+  deleteActivityType: (id: string) => Promise<void>;
 }
 
-const ActivitiesContext = createContext<ActivitiesContextType | null>(null)
+const ActivitiesContext = createContext<ActivitiesContextType | null>(null);
 
-// Helper to convert database row to Activity type
-function dbRowToActivity(row: any): Activity {
+const api = (path: string, options?: RequestInit) =>
+  fetch(path, { ...options, credentials: "include" });
+
+function mapActivity(row: Record<string, unknown>): Activity {
   return {
-    id: row.id,
-    type_id: row.type_id,
-    title: row.title,
-    date_from: row.date_from,
-    date_to: row.date_to,
-    location: row.location,
-    notes: row.notes,
-    status: row.status || "active",
-    archived_at: row.archived_at,
-    archived_by: row.archived_by,
-    created_by: row.created_by,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    participants_count: row.participants_count,
-  }
+    id: row.id as string,
+    type_id: row.type_id != null ? String(row.type_id) : (row.type_id as string),
+    title: row.title as string,
+    date_from: row.date_from as string,
+    date_to: row.date_to as string,
+    location: row.location as string,
+    notes: row.notes as string,
+    status: (row.status as ActivityStatus) || "active",
+    archived_at: row.archived_at as string,
+    archived_by: row.archived_by as string,
+    created_by: row.created_by as string,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+    participants_count: row.participants_count as number,
+  };
 }
 
-// Helper to convert Activity to database row format
-function activityToDbRow(activity: Partial<Activity>): Record<string, any> {
-  const row: Record<string, any> = {}
-
-  if (activity.type_id !== undefined) row.type_id = activity.type_id
-  if (activity.title !== undefined) row.title = activity.title || null
-  // Convert empty string dates to null to avoid PostgreSQL error
-  if (activity.date_from !== undefined) row.date_from = activity.date_from || null
-  if (activity.date_to !== undefined) row.date_to = activity.date_to || null
-  if (activity.location !== undefined) row.location = activity.location || null
-  if (activity.notes !== undefined) row.notes = activity.notes || null
-  if (activity.status !== undefined) row.status = activity.status
-  if (activity.archived_at !== undefined) row.archived_at = activity.archived_at || null
-  if (activity.archived_by !== undefined) row.archived_by = activity.archived_by || null
-  if (activity.created_by !== undefined) row.created_by = activity.created_by
-
-  return row
-}
-
-// Helper to convert database row to ActivityType
-function dbRowToActivityType(row: any): ActivityType {
+function mapActivityType(row: Record<string, unknown>): ActivityType {
   return {
-    id: row.id,
-    name: row.name,
-    category: row.category,
-    is_active: row.is_active,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  }
+    id: row.id != null ? String(row.id) : (row.id as string),
+    name: row.name as string,
+    category: row.category as string,
+    is_active: row.is_active as boolean,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  };
 }
 
-// Helper to convert database row to ActivityParticipant
-function dbRowToParticipant(row: any): ActivityParticipant {
+function mapParticipant(row: Record<string, unknown>): ActivityParticipant {
   return {
-    activity_id: row.activity_id,
-    member_id: row.member_id,
-    status: row.status,
-    note: row.note,
-    created_at: row.created_at,
-  }
+    activity_id: row.activity_id as string,
+    member_id: row.member_id as string,
+    status: row.status as ActivityParticipantStatus,
+    note: row.note as string,
+    created_at: row.created_at as string,
+  };
 }
 
 export function ActivitiesProvider({ children }: { children: ReactNode }) {
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
-  const [participants, setParticipants] = useState<ActivityParticipant[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const { user } = useAuth()
-  const supabase = createBrowserClient()
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
+  const [participants, setParticipants] = useState<ActivityParticipant[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
-  // Fetch all activities from Supabase
   const fetchActivities = useCallback(async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("activities")
-        .select("*")
-        .order("date_from", { ascending: false })
-
-      if (fetchError) {
-        console.error("Error fetching activities:", fetchError)
-        setError(fetchError.message)
-        return
+      const res = await api("/api/activities");
+      if (!res.ok) {
+        setError("Failed to load activities");
+        return;
       }
-
-      const mappedActivities = (data || []).map(dbRowToActivity)
-      setActivities(mappedActivities)
+      const data = await res.json();
+      setActivities(Array.isArray(data) ? data.map(mapActivity) : []);
     } catch (err) {
-      console.error("Failed to fetch activities:", err)
-      setError("Failed to load activities")
+      console.error("Failed to fetch activities:", err);
+      setError("Failed to load activities");
     }
-  }, [supabase])
+  }, []);
 
-  // Fetch all activity types from Supabase
   const fetchActivityTypes = useCallback(async () => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("activity_types")
-        .select("*")
-        .order("name", { ascending: true })
-
-      if (fetchError) {
-        console.error("Error fetching activity types:", {
-          message: fetchError.message,
-          details: fetchError.details,
-          hint: fetchError.hint,
-          code: fetchError.code
-        })
-        return
-      }
-
-      const mappedTypes = (data || []).map(dbRowToActivityType)
-      setActivityTypes(mappedTypes)
+      const res = await api("/api/activity-types");
+      if (!res.ok) return;
+      const data = await res.json();
+      setActivityTypes(Array.isArray(data) ? data.map(mapActivityType) : []);
     } catch (err) {
-      console.error("Failed to fetch activity types:", err)
+      console.error("Failed to fetch activity types:", err);
     }
-  }, [supabase])
+  }, []);
 
-  // Fetch all participants from Supabase
   const fetchParticipants = useCallback(async () => {
-    console.log("[fetchParticipants] Starting fetch")
     try {
-      const { data, error: fetchError } = await supabase
-        .from("activity_participants")
-        .select("*")
-
-      if (fetchError) {
-        console.error("[fetchParticipants] Fetch error:", fetchError)
-        return
-      }
-
-      const mappedParticipants = (data || []).map(dbRowToParticipant)
-      console.log("[fetchParticipants] Fetched participants count:", mappedParticipants.length)
-      setParticipants(mappedParticipants)
+      const res = await api("/api/activities/participants");
+      if (!res.ok) return;
+      const data = await res.json();
+      setParticipants(Array.isArray(data) ? data.map(mapParticipant) : []);
     } catch (err) {
-      console.error("[fetchParticipants] Failed to fetch participants:", err)
+      console.error("Failed to fetch participants:", err);
     }
-  }, [supabase])
+  }, []);
 
-  // Initial load
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
-      setError(null)
-      await Promise.all([fetchActivities(), fetchActivityTypes(), fetchParticipants()])
-      setIsLoading(false)
+    let mounted = true;
+    async function load() {
+      await Promise.all([fetchActivities(), fetchActivityTypes(), fetchParticipants()]);
+      if (mounted) setIsLoading(false);
     }
-    loadData()
-  }, [fetchActivities, fetchActivityTypes, fetchParticipants])
-
-  // Subscribe to realtime changes
-  useEffect(() => {
-    const activitiesChannel = supabase
-      .channel("activities-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activities" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newActivity = dbRowToActivity(payload.new)
-            setActivities((prev) => [newActivity, ...prev])
-          } else if (payload.eventType === "UPDATE") {
-            const updatedActivity = dbRowToActivity(payload.new)
-            setActivities((prev) =>
-              prev.map((a) => (a.id === updatedActivity.id ? updatedActivity : a))
-            )
-          } else if (payload.eventType === "DELETE") {
-            setActivities((prev) => prev.filter((a) => a.id !== payload.old.id))
-          }
-        }
-      )
-      .subscribe()
-
-    const participantsChannel = supabase
-      .channel("participants-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_participants" },
-        (payload) => {
-          console.log("[Realtime] Participant event:", payload.eventType, payload)
-          
-          if (payload.eventType === "INSERT") {
-            const newParticipant = dbRowToParticipant(payload.new)
-            console.log("[Realtime] Adding participant:", newParticipant)
-            setParticipants((prev) => [...prev, newParticipant])
-          } else if (payload.eventType === "UPDATE") {
-            const updatedParticipant = dbRowToParticipant(payload.new)
-            console.log("[Realtime] Updating participant:", updatedParticipant)
-            setParticipants((prev) =>
-              prev.map((p) =>
-                p.activity_id === updatedParticipant.activity_id && p.member_id === updatedParticipant.member_id
-                  ? updatedParticipant
-                  : p
-              )
-            )
-          } else if (payload.eventType === "DELETE") {
-            console.log("[Realtime] Deleting participant:", payload.old)
-            setParticipants((prev) =>
-              prev.filter(
-                (p) =>
-                  !(p.activity_id === payload.old.activity_id && p.member_id === payload.old.member_id)
-              )
-            )
-          }
-        }
-      )
-      .subscribe()
-
-    const typesChannel = supabase
-      .channel("activity-types-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_types" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newType = dbRowToActivityType(payload.new)
-            setActivityTypes((prev) => [...prev, newType])
-          } else if (payload.eventType === "UPDATE") {
-            const updatedType = dbRowToActivityType(payload.new)
-            setActivityTypes((prev) =>
-              prev.map((t) => (t.id === updatedType.id ? updatedType : t))
-            )
-          } else if (payload.eventType === "DELETE") {
-            setActivityTypes((prev) => prev.filter((t) => t.id !== payload.old.id))
-          }
-        }
-      )
-      .subscribe()
-
+    load();
     return () => {
-      supabase.removeChannel(activitiesChannel)
-      supabase.removeChannel(participantsChannel)
-      supabase.removeChannel(typesChannel)
-    }
-  }, [supabase])
+      mounted = false;
+    };
+  }, [fetchActivities, fetchActivityTypes, fetchParticipants]);
 
-  const generateActivityId = async () => {
-    // Get max activity ID from database
-    const { data } = await supabase
-      .from("activities")
-      .select("id")
-      .order("id", { ascending: false })
-      .limit(1)
+  const refreshActivities = useCallback(async () => {
+    setIsLoading(true);
+    await Promise.all([fetchActivities(), fetchActivityTypes(), fetchParticipants()]);
+    setIsLoading(false);
+  }, [fetchActivities, fetchActivityTypes, fetchParticipants]);
 
-    let maxNum = 0
-    if (data && data.length > 0) {
-      const match = data[0].id.match(/^ACT-(\d+)$/)
-      if (match) {
-        maxNum = Number.parseInt(match[1], 10)
+  const createActivity = useCallback(
+    async (
+      activityData: Omit<Activity, "id" | "created_at" | "updated_at" | "status">
+    ): Promise<Activity> => {
+      const payload = {
+        ...activityData,
+        type_id: activityData.type_id ? Number(activityData.type_id) || null : null,
+      };
+      const res = await api("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create activity");
       }
-    }
-    return `ACT-${String(maxNum + 1).padStart(4, "0")}`
-  }
-
-  const createActivity = async (activityData: Omit<Activity, "id" | "created_at" | "updated_at" | "status">) => {
-    try {
-      const activityId = await generateActivityId()
-      console.log("Generated activity ID:", activityId)
-
-      const dbRow = activityToDbRow(activityData)
-      dbRow.id = activityId
-      dbRow.status = "active"
-      dbRow.created_by = user?.id
-
-      console.log("Data to insert:", dbRow)
-
-      const { data, error: insertError } = await supabase
-        .from("activities")
-        .insert(dbRow)
-        .select()
-
-      // Check for actual insert failure
-      if (insertError) {
-        console.error("Supabase insert error:", {
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          code: insertError.code,
-          fullError: insertError
-        })
-        throw new Error(insertError.message || `Database error: ${JSON.stringify(insertError)}`)
-      }
-
-      // Get the inserted activity (data is an array)
-      const insertedData = data && data.length > 0 ? data[0] : null
-      
-      if (!insertedData) {
-        console.error("No data returned after activity insert")
-        throw new Error("No data returned from database")
-      }
-
-      const newActivity = dbRowToActivity(insertedData)
-
-      // Manually add to local state to immediately show in list
-      setActivities((prev) => [newActivity, ...prev])
-
+      const newActivity = mapActivity(await res.json());
+      setActivities((prev) => [newActivity, ...prev]);
       AuditLogger.log({
         user,
         actionType: "CREATE_ACTIVITY",
@@ -335,394 +184,279 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         entityId: newActivity.id,
         entityCode: newActivity.id,
         summary: `Activitate nouă creată: ${newActivity.title || "Fără titlu"} (${newActivity.id})`,
-        metadata: {
-          type_id: newActivity.type_id,
-          date_from: newActivity.date_from,
-          location: newActivity.location,
-        },
-      })
+        metadata: { type_id: newActivity.type_id, date_from: newActivity.date_from, location: newActivity.location },
+      });
+      return newActivity;
+    },
+    [user]
+  );
 
-      return newActivity
-    } catch (error) {
-      console.error("Error in createActivity:", error)
-      throw error
-    }
-  }
+  const updateActivity = useCallback(
+    async (id: string, updates: Partial<Activity>): Promise<void> => {
+      const oldActivity = activities.find((a) => a.id === id);
+      const payload = { ...updates };
+      if (payload.type_id !== undefined) payload.type_id = Number(payload.type_id) || null;
+      const res = await api(`/api/activities/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update activity");
+      }
+      if (oldActivity) {
+        AuditLogger.log({
+          user,
+          actionType: "UPDATE_ACTIVITY",
+          module: "activities",
+          entityType: "activity",
+          entityId: id,
+          entityCode: id,
+          summary: `Activitate actualizată: ${oldActivity.title || "Fără titlu"} (${id})`,
+          metadata: { changedFields: Object.keys(updates), updates },
+        });
+      }
+      await fetchActivities();
+    },
+    [activities, user, fetchActivities]
+  );
 
-  const updateActivity = async (id: string, updates: Partial<Activity>) => {
-    const oldActivity = activities.find((a) => a.id === id)
+  const deleteActivity = useCallback(
+    async (id: string): Promise<void> => {
+      const activity = activities.find((a) => a.id === id);
+      const res = await api(`/api/activities/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete activity");
+      }
+      setActivities((prev) => prev.filter((a) => a.id !== id));
+      setParticipants((prev) => prev.filter((p) => p.activity_id !== id));
+      if (activity) {
+        AuditLogger.log({
+          user,
+          actionType: "DELETE_ACTIVITY",
+          module: "activities",
+          entityType: "activity",
+          entityId: id,
+          entityCode: id,
+          summary: `Activitate ștearsă: ${activity.title || "Fără titlu"} (${id})`,
+          metadata: {
+            participantsCount: participants.filter((p) => p.activity_id === id).length,
+            date_from: activity.date_from,
+            location: activity.location,
+          },
+        });
+      }
+      await fetchActivities();
+    },
+    [activities, participants, user, fetchActivities]
+  );
 
-    const dbRow = activityToDbRow(updates)
-    dbRow.updated_at = new Date().toISOString()
+  const archiveActivity = useCallback(
+    async (id: string): Promise<void> => {
+      const activity = activities.find((a) => a.id === id);
+      const res = await api(`/api/activities/${id}/archive`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to archive activity");
+      }
+      if (activity) {
+        AuditLogger.log({
+          user,
+          actionType: "ARCHIVE_ACTIVITY",
+          module: "activities",
+          entityType: "activity",
+          entityId: id,
+          entityCode: id,
+          summary: `Activitate arhivată: ${activity.title || "Fără titlu"} (${id})`,
+          metadata: { previousStatus: activity.status, date_from: activity.date_from },
+        });
+      }
+      await fetchActivities();
+    },
+    [activities, user, fetchActivities]
+  );
 
-    const { error: updateError } = await supabase
-      .from("activities")
-      .update(dbRow)
-      .eq("id", id)
+  const reactivateActivity = useCallback(
+    async (id: string): Promise<void> => {
+      const activity = activities.find((a) => a.id === id);
+      const res = await api(`/api/activities/${id}/reactivate`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to reactivate activity");
+      }
+      if (activity) {
+        AuditLogger.log({
+          user,
+          actionType: "REACTIVATE_ACTIVITY",
+          module: "activities",
+          entityType: "activity",
+          entityId: id,
+          entityCode: id,
+          summary: `Activitate reactivată: ${activity.title || "Fără titlu"} (${id})`,
+          metadata: { previousStatus: activity.status, date_from: activity.date_from },
+        });
+      }
+      await fetchActivities();
+    },
+    [activities, user, fetchActivities]
+  );
 
-    if (updateError) {
-      console.error("Failed to update activity:", updateError)
-      throw new Error(updateError.message)
-    }
-
-    if (oldActivity) {
+  const addParticipants = useCallback(
+    async (activityId: string, memberIds: string[]): Promise<void> => {
+      const existing = participants.filter(
+        (p) => p.activity_id === activityId && memberIds.includes(p.member_id)
+      );
+      const newMemberIds = memberIds.filter(
+        (memberId) => !existing.some((p) => p.member_id === memberId)
+      );
+      if (newMemberIds.length === 0) {
+        throw new Error("Toți membrii selectați sunt deja participanți la această activitate");
+      }
+      const res = await api(`/api/activities/${activityId}/participants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberIds: newMemberIds }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Nu s-au putut adăuga participanții");
+      }
+      const activity = activities.find((a) => a.id === activityId);
       AuditLogger.log({
         user,
-        actionType: "UPDATE_ACTIVITY",
+        actionType: "ADD_PARTICIPANTS",
         module: "activities",
         entityType: "activity",
-        entityId: id,
-        entityCode: id,
-        summary: `Activitate actualizată: ${oldActivity.title || "Fără titlu"} (${id})`,
-        metadata: {
-          changedFields: Object.keys(updates),
-          updates,
-        },
-      })
-    }
+        entityId: activityId,
+        entityCode: activityId,
+        summary: `${newMemberIds.length} participanți adăugați la activitatea ${activity?.title || activityId}`,
+        metadata: { participantsAdded: newMemberIds.length, activityTitle: activity?.title },
+      });
+      const newParticipantsData = newMemberIds.map((member_id) => ({
+        activity_id: activityId,
+        member_id,
+        status: "attended" as const,
+        note: undefined,
+        created_at: new Date().toISOString(),
+      }));
+      setParticipants((prev) => [...prev, ...newParticipantsData]);
+    },
+    [activities, participants, user]
+  );
 
-    // Refresh activities list to show the updated activity
-    await fetchActivities()
-  }
-
-  const deleteActivity = async (id: string) => {
-    const activity = activities.find((a) => a.id === id)
-    const activityParticipants = participants.filter((p) => p.activity_id === id)
-
-    const { error: deleteError } = await supabase
-      .from("activities")
-      .delete()
-      .eq("id", id)
-
-    if (deleteError) {
-      console.error("Failed to delete activity:", deleteError)
-      throw new Error(deleteError.message)
-    }
-
-    // Manually update local state to immediately reflect the deletion
-    setActivities((prev) => prev.filter((a) => a.id !== id))
-    setParticipants((prev) => prev.filter((p) => p.activity_id !== id))
-
-    if (activity) {
-      AuditLogger.log({
-        user,
-        actionType: "DELETE_ACTIVITY",
-        module: "activities",
-        entityType: "activity",
-        entityId: id,
-        entityCode: id,
-        summary: `Activitate ștearsă: ${activity.title || "Fără titlu"} (${id})`,
-        metadata: {
-          participantsCount: activityParticipants.length,
-          date_from: activity.date_from,
-          location: activity.location,
-        },
-      })
-    }
-
-    // Refresh activities list
-    await fetchActivities()
-  }
-
-  const archiveActivity = async (id: string) => {
-    const activity = activities.find((a) => a.id === id)
-
-    const { error: updateError } = await supabase
-      .from("activities")
-      .update({
-        status: "archived",
-        archived_at: new Date().toISOString(),
-        archived_by: user?.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-
-    if (updateError) {
-      console.error("Failed to archive activity:", updateError)
-      throw new Error(updateError.message)
-    }
-
-    if (activity) {
-      AuditLogger.log({
-        user,
-        actionType: "ARCHIVE_ACTIVITY",
-        module: "activities",
-        entityType: "activity",
-        entityId: id,
-        entityCode: id,
-        summary: `Activitate arhivată: ${activity.title || "Fără titlu"} (${id})`,
-        metadata: {
-          previousStatus: activity.status,
-          date_from: activity.date_from,
-        },
-      })
-    }
-
-    // Refresh activities list
-    await fetchActivities()
-  }
-
-  const reactivateActivity = async (id: string) => {
-    const activity = activities.find((a) => a.id === id)
-
-    const { error: updateError } = await supabase
-      .from("activities")
-      .update({
-        status: "active",
-        archived_at: null,
-        archived_by: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-
-    if (updateError) {
-      console.error("Failed to reactivate activity:", updateError)
-      throw new Error(updateError.message)
-    }
-
-    if (activity) {
-      AuditLogger.log({
-        user,
-        actionType: "REACTIVATE_ACTIVITY",
-        module: "activities",
-        entityType: "activity",
-        entityId: id,
-        entityCode: id,
-        summary: `Activitate reactivată: ${activity.title || "Fără titlu"} (${id})`,
-        metadata: {
-          previousStatus: activity.status,
-          date_from: activity.date_from,
-        },
-      })
-    }
-
-    // Refresh activities list
-    await fetchActivities()
-  }
-
-  const addParticipants = async (activityId: string, memberIds: string[]) => {
-    console.log("[addParticipants] Starting, activityId:", activityId, "memberIds:", memberIds)
-    
-    const existingParticipants = participants.filter(
-      (p) => p.activity_id === activityId && memberIds.includes(p.member_id)
-    )
-
-    // Filter out members that are already participants
-    const newMemberIds = memberIds.filter(
-      (memberId) => !existingParticipants.some((p) => p.member_id === memberId)
-    )
-
-    if (newMemberIds.length === 0) {
-      console.log("[addParticipants] No new members to add (all already participants)")
-      throw new Error("Toți membrii selectați sunt deja participanți la această activitate")
-    }
-
-    const newParticipants = newMemberIds.map((memberId) => ({
-      activity_id: activityId,
-      member_id: memberId,
-      status: "attended" as ActivityParticipantStatus,
-    }))
-
-    console.log("[addParticipants] Inserting participants:", newParticipants)
-    
-    let data, insertError
-    
-    try {
-      const result = await Promise.race([
-        supabase.from("activity_participants").insert(newParticipants).select(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout: operația a durat prea mult')), 10000)
+  const updateParticipant = useCallback(
+    async (
+      activityId: string,
+      memberId: string,
+      updates: Partial<Pick<ActivityParticipant, "status" | "note">>
+    ): Promise<void> => {
+      const res = await api(`/api/activities/${activityId}/participants`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberId, ...updates }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update participant");
+      }
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.activity_id === activityId && p.member_id === memberId ? { ...p, ...updates } : p
         )
-      ]) as any
-      data = result.data
-      insertError = result.error
-    } catch (err: any) {
-      console.error("[addParticipants] Insert timed out or failed:", err)
-      throw new Error(err.message || 'Operația a eșuat')
-    }
+      );
+    },
+    []
+  );
 
-    if (insertError) {
-      console.error("[addParticipants] Insert failed:", insertError)
-      throw new Error(insertError.message || 'Nu s-au putut adăuga participanții')
-    }
+  const removeParticipant = useCallback(
+    async (activityId: string, memberId: string): Promise<void> => {
+      const res = await api(
+        `/api/activities/${activityId}/participants?memberId=${encodeURIComponent(memberId)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to remove participant");
+      }
+      const activity = activities.find((a) => a.id === activityId);
+      AuditLogger.log({
+        user,
+        actionType: "REMOVE_PARTICIPANTS",
+        module: "activities",
+        entityType: "activity",
+        entityId: activityId,
+        entityCode: activityId,
+        summary: `Participant eliminat din activitatea ${activity?.title || activityId}`,
+        metadata: { memberId, activityTitle: activity?.title },
+      });
+      setParticipants((prev) =>
+        prev.filter((p) => !(p.activity_id === activityId && p.member_id === memberId))
+      );
+    },
+    [activities, user]
+  );
 
-    console.log("[addParticipants] Insert successful:", data)
-
-    const activity = activities.find((a) => a.id === activityId)
-    AuditLogger.log({
-      user,
-      actionType: "ADD_PARTICIPANTS",
-      module: "activities",
-      entityType: "activity",
-      entityId: activityId,
-      entityCode: activityId,
-      summary: `${newMemberIds.length} participanți adăugați la activitatea ${activity?.title || activityId}`,
-      metadata: {
-        participantsAdded: newMemberIds.length,
-        activityTitle: activity?.title,
-      },
-    })
-
-    // Optimistically update local state immediately
-    const newParticipantsData = (data || []).map(dbRowToParticipant)
-    setParticipants((prev) => [...prev, ...newParticipantsData])
-    
-    console.log("[addParticipants] Complete - optimistic update applied")
-  }
-
-  const updateParticipant = async (activityId: string, memberId: string, updates: Partial<Pick<ActivityParticipant, "status" | "note">>) => {
-    console.log("[updateParticipant] Starting, activityId:", activityId, "memberId:", memberId, "updates:", updates)
-    
-    const { error: updateError } = await supabase
-      .from("activity_participants")
-      .update(updates)
-      .eq("activity_id", activityId)
-      .eq("member_id", memberId)
-
-    if (updateError) {
-      console.error("[updateParticipant] Update failed:", updateError)
-      throw new Error(updateError.message)
-    }
-
-    console.log("[updateParticipant] Update successful")
-
-    const activity = activities.find((a) => a.id === activityId)
-    AuditLogger.log({
-      user,
-      actionType: "UPDATE_PARTICIPANTS",
-      module: "activities",
-      entityType: "activity",
-      entityId: activityId,
-      entityCode: activityId,
-      summary: `Participant actualizat în activitatea ${activity?.title || activityId}`,
-      metadata: {
-        memberId,
-        updates,
-        activityTitle: activity?.title,
-      },
-    })
-
-    // Optimistically update local state immediately
-    setParticipants((prev) =>
-      prev.map((p) =>
-        p.activity_id === activityId && p.member_id === memberId
-          ? { ...p, ...updates }
-          : p
-      )
-    )
-    
-    console.log("[updateParticipant] Complete - optimistic update applied")
-  }
-
-  const removeParticipant = async (activityId: string, memberId: string) => {
-    console.log("[removeParticipant] Starting, activityId:", activityId, "memberId:", memberId)
-    
-    const { error: deleteError } = await supabase
-      .from("activity_participants")
-      .delete()
-      .eq("activity_id", activityId)
-      .eq("member_id", memberId)
-
-    if (deleteError) {
-      console.error("[removeParticipant] Delete failed:", deleteError)
-      throw new Error(deleteError.message)
-    }
-
-    console.log("[removeParticipant] Delete successful")
-
-    const activity = activities.find((a) => a.id === activityId)
-    AuditLogger.log({
-      user,
-      actionType: "REMOVE_PARTICIPANTS",
-      module: "activities",
-      entityType: "activity",
-      entityId: activityId,
-      entityCode: activityId,
-      summary: `Participant eliminat din activitatea ${activity?.title || activityId}`,
-      metadata: {
-        memberId,
-        activityTitle: activity?.title,
-      },
-    })
-
-    // Optimistically update local state immediately
-    setParticipants((prev) =>
-      prev.filter((p) => !(p.activity_id === activityId && p.member_id === memberId))
-    )
-    
-    console.log("[removeParticipant] Complete - optimistic update applied")
-  }
-
-  const getActivityById = (id: string) => {
-    return activities.find((activity) => activity.id === id)
-  }
-
-  const getParticipants = (activityId: string) => {
-    return participants.filter((p) => p.activity_id === activityId)
-  }
-
+  const getActivityById = (id: string) => activities.find((a) => a.id === id);
+  const getParticipants = (activityId: string) =>
+    participants.filter((p) => p.activity_id === activityId);
   const getMemberActivities = (memberId: string) => {
-    const memberParticipations = participants.filter((p) => p.member_id === memberId)
-    return activities.filter((activity) =>
-      memberParticipations.some((p) => p.activity_id === activity.id)
-    )
-  }
+    const memberParticipations = participants.filter((p) => p.member_id === memberId);
+    return activities.filter((a) =>
+      memberParticipations.some((p) => p.activity_id === a.id)
+    );
+  };
 
-  const refreshActivities = async () => {
-    setIsLoading(true)
-    await Promise.all([fetchActivities(), fetchActivityTypes(), fetchParticipants()])
-    setIsLoading(false)
-  }
+  const updateActivityTypes = (types: ActivityType[]) => setActivityTypes(types);
 
-  const updateActivityTypes = (types: ActivityType[]) => {
-    setActivityTypes(types)
-  }
+  const createActivityType = useCallback(
+    async (
+      typeData: Omit<ActivityType, "id" | "created_at" | "updated_at">
+    ): Promise<ActivityType> => {
+      const res = await api("/api/activity-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(typeData),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create activity type");
+      }
+      const newType = mapActivityType(await res.json());
+      setActivityTypes((prev) => [...prev, newType].sort((a, b) => a.name.localeCompare(b.name)));
+      return newType;
+    },
+    []
+  );
 
-  const createActivityType = async (typeData: Omit<ActivityType, "id" | "created_at" | "updated_at">) => {
-    const { data, error: insertError } = await supabase
-      .from("activity_types")
-      .insert({
-        name: typeData.name,
-        category: typeData.category,
-        is_active: typeData.is_active,
-      })
-      .select()
-      .single()
+  const updateActivityType = useCallback(
+    async (id: string, updates: Partial<ActivityType>): Promise<void> => {
+      const res = await api(`/api/activity-types/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update activity type");
+      }
+      await fetchActivityTypes();
+    },
+    [fetchActivityTypes]
+  );
 
-    if (insertError || !data) {
-      console.error("Failed to create activity type:", insertError)
-      throw new Error(insertError?.message || "Failed to create activity type")
-    }
-
-    return dbRowToActivityType(data)
-  }
-
-  const updateActivityType = async (id: string, updates: Partial<ActivityType>) => {
-    const { error: updateError } = await supabase
-      .from("activity_types")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-
-    if (updateError) {
-      console.error("Failed to update activity type:", updateError)
-      throw new Error(updateError.message)
-    }
-  }
-
-  const deleteActivityType = async (id: string) => {
-    const { error: deleteError } = await supabase
-      .from("activity_types")
-      .delete()
-      .eq("id", id)
-
-    if (deleteError) {
-      console.error("Failed to delete activity type:", deleteError)
-      throw new Error(deleteError.message)
-    }
-  }
+  const deleteActivityType = useCallback(
+    async (id: string): Promise<void> => {
+      const res = await api(`/api/activity-types/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete activity type");
+      }
+      setActivityTypes((prev) => prev.filter((t) => String(t.id) !== String(id)));
+    },
+    []
+  );
 
   return (
     <ActivitiesContext.Provider
@@ -751,13 +485,13 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </ActivitiesContext.Provider>
-  )
+  );
 }
 
 export function useActivities() {
-  const context = useContext(ActivitiesContext)
+  const context = useContext(ActivitiesContext);
   if (!context) {
-    throw new Error("useActivities must be used within ActivitiesProvider")
+    throw new Error("useActivities must be used within ActivitiesProvider");
   }
-  return context
+  return context;
 }

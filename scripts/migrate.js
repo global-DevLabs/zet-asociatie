@@ -2,16 +2,34 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Pool } = require("pg");
 
+// Load .env.local if present (so LOCAL_DB_URL can be set there)
+const envPath = path.join(process.cwd(), ".env.local");
+if (fs.existsSync(envPath)) {
+  const content = fs.readFileSync(envPath, "utf8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("#")) {
+      const eq = trimmed.indexOf("=");
+      if (eq > 0) {
+        const key = trimmed.slice(0, eq).trim();
+        const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+        if (!process.env[key]) process.env[key] = value;
+      }
+    }
+  }
+}
+
 /**
  * Very small SQL migration runner for the local PostgreSQL instance.
  *
- * Usage (when LOCAL_DB_URL and USE_LOCAL_DB are configured):
+ * Usage:
+ *   node scripts/migrate.js
+ *   (reads LOCAL_DB_URL from .env.local or env; set USE_LOCAL_DB=true to allow running)
  *
- *   USE_LOCAL_DB=true LOCAL_DB_URL=... node scripts/migrate.js
+ * Or: USE_LOCAL_DB=true LOCAL_DB_URL=... node scripts/migrate.js
  *
  * IMPORTANT:
- * - This script is only intended for the local/offline setup,
- *   not for the existing Supabase database.
+ * - This script is only intended for the local/offline setup.
  */
 
 const MIGRATIONS_DIR = path.join(process.cwd(), "db", "migrations");
@@ -63,9 +81,9 @@ async function applyMigration(pool, fileName, sql) {
 }
 
 async function runMigrations() {
-  if (process.env.USE_LOCAL_DB !== "true") {
+  if (!process.env.LOCAL_DB_URL) {
     console.error(
-      "Refusing to run migrations because USE_LOCAL_DB is not set to 'true'.",
+      "LOCAL_DB_URL is not set. Create .env.local (e.g. run node scripts/generate-env.js) or set LOCAL_DB_URL.",
     );
     process.exit(1);
   }

@@ -22,18 +22,13 @@ export type DbClient = {
 function getPool(): Pool {
   if (!pool) {
     const connectionString = process.env.LOCAL_DB_URL;
-
     if (!connectionString) {
       throw new Error(
-        "LOCAL_DB_URL is not set. This should only be required when USE_LOCAL_DB=true.",
+        "LOCAL_DB_URL is not set. Set it for local PostgreSQL (e.g. from Electron config).",
       );
     }
-
-    pool = new Pool({
-      connectionString,
-    });
+    pool = new Pool({ connectionString });
   }
-
   return pool;
 }
 
@@ -41,12 +36,6 @@ function getPool(): Pool {
  * Acquire a client from the pool. For most simple use cases, prefer `dbQuery`.
  */
 export async function getDbClient(): Promise<DbClient> {
-  if (process.env.USE_LOCAL_DB !== "true") {
-    throw new Error(
-      "getDbClient was called while USE_LOCAL_DB is not enabled. This function should only be used for the local DB path.",
-    );
-  }
-
   const client: PoolClient = await getPool().connect();
 
   return {
@@ -57,17 +46,12 @@ export async function getDbClient(): Promise<DbClient> {
 
 /**
  * Convenience helper for simple one-off queries.
+ * Uses LOCAL_DB_URL (or USE_LOCAL_DB=true + LOCAL_DB_URL) for the local Postgres instance.
  */
 export async function dbQuery<T = unknown>(
   text: string,
   params?: any[],
 ): Promise<QueryResult<T>> {
-  if (process.env.USE_LOCAL_DB !== "true") {
-    throw new Error(
-      "dbQuery was called while USE_LOCAL_DB is not enabled. This helper should only be used for the local DB path.",
-    );
-  }
-
   const pool = getPool();
   return pool.query<T>(text, params);
 }

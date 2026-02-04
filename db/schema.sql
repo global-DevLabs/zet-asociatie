@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   notes text,
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
-  created_by uuid
+  created_by uuid,
+  password_hash text  -- bcrypt hash for local auth; NULL until user sets password or is created via register
 );
 
 -- MEMBERS -------------------------------------------------------------------
