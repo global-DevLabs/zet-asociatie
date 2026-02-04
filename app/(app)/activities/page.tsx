@@ -87,7 +87,7 @@ export default function ActivitiesPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [showArchived, setShowArchived] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">("active")
 
   const [filters, setFilters] = useState({
     typeIds: [] as string[],
@@ -114,9 +114,15 @@ export default function ActivitiesPage() {
   const canEdit = hasPermission("edit")
 
   const filteredActivities = activities.filter((activity) => {
-    if (!showArchived && activity.status === "archived") {
+    // Filter by status
+    if (statusFilter === "active" && activity.status === "archived") {
       return false
     }
+    if (statusFilter === "archived" && activity.status !== "archived") {
+      return false
+    }
+    // statusFilter === "all" shows everything
+    
     if (filters.typeIds.length > 0 && !filters.typeIds.includes(activity.type_id)) {
       return false
     }
@@ -204,14 +210,28 @@ export default function ActivitiesPage() {
       description="Gestionați activitățile și evenimente"
       actions={
         <div className="flex items-center gap-2">
-          <Button
-            variant={showArchived ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowArchived(!showArchived)}
-          >
-            <Archive className="mr-2 h-4 w-4" />
-            {showArchived ? "Doar active" : "Afișează arhivate"}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Archive className="mr-2 h-4 w-4" />
+                {statusFilter === "active" && "Doar active"}
+                {statusFilter === "archived" && "Doar arhivate"}
+                {statusFilter === "all" && "Toate activitățile"}
+                <ChevronDown className="ml-2 h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setStatusFilter("active")}>
+                Doar active
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusFilter("archived")}>
+                Doar arhivate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusFilter("all")}>
+                Toate activitățile
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button variant="outline" size="sm" onClick={() => setShowFilters(true)}>
             <Filter className="mr-2 h-4 w-4" />

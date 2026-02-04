@@ -130,16 +130,21 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
           is_active: true,
         }
 
-        const { data, error: insertError } = await supabase.from("um_units").insert(newUnit).select().single()
+        const { data, error: insertError } = await supabase.from("um_units").insert(newUnit).select()
 
+        // Check for actual insert failure
         if (insertError) {
-          console.error(" Failed to add UM unit:", insertError)
+          console.error("Failed to add UM unit:", insertError)
           return {
             success: false,
             error: insertError.message,
           }
         }
 
+        // Get the inserted unit (data is an array)
+        const insertedUnit = data && data.length > 0 ? data[0] : null
+
+        // Refresh to ensure consistency
         await refreshUnits()
 
         // Audit log
@@ -148,7 +153,7 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
           actionType: "create",
           module: "settings",
           entityType: "um_unit",
-          entityId: data.id,
+          entityId: insertedUnit?.id,
           summary: `Adăugat UM: ${formattedCode}`,
           metadata: { code: formattedCode, name },
         })
@@ -160,7 +165,7 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
 
         return {
           success: true,
-          unit: data,
+          unit: insertedUnit || undefined,
         }
       } catch (err) {
         console.error(" Error adding UM unit:", err)

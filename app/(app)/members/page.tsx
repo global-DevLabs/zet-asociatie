@@ -11,9 +11,10 @@ import { PageContainer } from "@/components/layout/page-container";
 import { MembersTable } from "@/components/members/members-table";
 import { MemberFilters } from "@/components/members/member-filters";
 import { ExportModal } from "@/components/members/export-modal";
+import { ImportModal } from "@/components/members/import-modal";
 import { Button } from "@/components/ui/button";
 import { ListSorter, type SortOption } from "@/components/ui/list-sorter";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, Upload } from "lucide-react";
 import { useMembers } from "@/lib/members-store";
 import { useWhatsAppGroups } from "@/lib/whatsapp-groups-store";
 import { useActivities } from "@/lib/activities-store";
@@ -112,10 +113,12 @@ function MembersPageContent() {
     string[] | null
   >(null);
   const [isSearching, setIsSearching] = useState(false);
-  // Server search is enabled - members are now stored in Supabase
-  const [useServerSearch, setUseServerSearch] = useState(true);
+  // Disable server search to use comprehensive client-side search that includes all fields
+  // (needs, activities, age, observations, WhatsApp groups, etc.)
+  const [useServerSearch, setUseServerSearch] = useState(false);
   const searchAbortRef = useRef<AbortController | null>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({
     ranks: [] as string[],
     units: [] as string[],
@@ -263,6 +266,18 @@ function MembersPageContent() {
           })
           .join(" ");
 
+        // Get activities this member participated in
+        const memberActivities = activities
+          .filter(activity => {
+            const participants = getParticipants(activity.id);
+            return participants.some(p => p.member_id === member.id);
+          })
+          .map(activity => {
+            const type = activityTypes.find(t => t.id === activity.type_id);
+            return `${activity.name || ""} ${type?.name || ""}`;
+          })
+          .join(" ");
+
         // Check member code using the utility that supports all formats
         const matchesMemberCode = memberCodeMatchesSearch(
           member.memberCode,
@@ -285,7 +300,8 @@ function MembersPageContent() {
           normalizeText(ageWithUnit).includes(normalizedQuery) ||
           normalizeText(allNeeds).includes(normalizedQuery) ||
           normalizeText(observations).includes(normalizedQuery) ||
-          normalizeText(memberGroupNames).includes(normalizedQuery);
+          normalizeText(memberGroupNames).includes(normalizedQuery) ||
+          normalizeText(memberActivities).includes(normalizedQuery);
 
         if (!matchesSimple) return false;
       }
@@ -435,6 +451,7 @@ function MembersPageContent() {
     advancedFilters,
     groups,
     activities,
+    activityTypes,
     getParticipants,
     serverSearchResults,
     useServerSearch,
@@ -463,6 +480,15 @@ function MembersPageContent() {
       description="Gestionează membrii asociației"
       actions={
         <div className="flex gap-2">
+          {hasPermission("edit") && (
+            <Button
+              variant="outline"
+              onClick={() => setImportModalOpen(true)}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => setExportModalOpen(true)}
@@ -472,12 +498,12 @@ function MembersPageContent() {
             Export
           </Button>
           {hasPermission("edit") ? (
-            <Link href="/members/new">
-              <Button>
+            <Button asChild>
+              <Link href="/members/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Adaugă Membru
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           ) : undefined}
         </div>
       }
@@ -557,6 +583,11 @@ function MembersPageContent() {
         onOpenChange={setExportModalOpen}
         members={sortedMembers}
         filterDescription={filterDescription}
+      />
+      
+      <ImportModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
       />
     </PageContainer>
   );

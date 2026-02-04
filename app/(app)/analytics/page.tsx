@@ -252,7 +252,6 @@ function AnalyticsPageContent() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={handleExportCSV}>Export CSV</DropdownMenuItem>
-                    <DropdownMenuItem disabled>Export XLSX (În curând)</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

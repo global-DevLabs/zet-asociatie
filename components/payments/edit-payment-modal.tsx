@@ -167,7 +167,7 @@ export function EditPaymentModal({ payment, open, onOpenChange }: EditPaymentMod
     setIsSubmitting(true)
 
     try {
-      const success = updatePayment(payment.id, {
+      const success = await updatePayment(payment.id, {
         memberId: selectedMemberId,
         date: formData.date,
         year: new Date(formData.date).getFullYear(),

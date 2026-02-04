@@ -192,14 +192,25 @@ export function PaymentsProvider({ children }: { children: ReactNode }) {
         .from("payments")
         .insert(dbRow)
         .select()
-        .single()
 
-      if (insertError || !data) {
+      // Check for actual insert failure
+      if (insertError) {
         console.error("Failed to create payment:", insertError)
-        throw new Error(insertError?.message || "Failed to create payment")
+        throw new Error(insertError.message || "Failed to create payment")
       }
 
-      const newPayment = dbRowToPayment(data)
+      // Get the inserted payment (data is an array)
+      const insertedData = data && data.length > 0 ? data[0] : null
+      
+      if (!insertedData) {
+        console.error("No data returned after payment insert")
+        throw new Error("Failed to retrieve created payment data")
+      }
+
+      const newPayment = dbRowToPayment(insertedData)
+
+      // Manually add to local state to immediately show in list
+      setPayments((prev) => [newPayment, ...prev])
 
       AuditLogger.log({
         user,
@@ -285,6 +296,10 @@ export function PaymentsProvider({ children }: { children: ReactNode }) {
         console.error("Failed to delete payment:", deleteError)
         return false
       }
+
+      // Manually update local state to immediately reflect the deletion
+      // (realtime subscription may not always receive the DELETE event properly)
+      setPayments((prev) => prev.filter((p) => p.id !== id))
 
       const member = members.find((m) => m.id === payment.memberId)
 

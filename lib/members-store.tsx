@@ -260,18 +260,34 @@ export function MembersProvider({ children }: { children: ReactNode }) {
       const { data, error: insertError } = await supabase
         .from("members")
         .insert(dbRow)
-        .select()
-        .single();
+        .select();
 
-      if (insertError || !data) {
+      // Check for actual insert failure
+      if (insertError) {
         console.error("Failed to create member:", insertError);
-        throw new Error(insertError?.message || "Failed to create member");
+        throw new Error(insertError.message || "Failed to create member");
       }
 
-      const newMember = dbRowToMember(data);
+      // Get the inserted member (data is an array)
+      const insertedData = data && data.length > 0 ? data[0] : null;
+      
+      if (!insertedData) {
+        console.error("No data returned after member insert");
+        throw new Error("Failed to retrieve created member data");
+      }
 
-      // Refresh search index
-      await supabase.rpc("refresh_member_search_index").catch(console.error);
+      const newMember = dbRowToMember(insertedData);
+
+      // Manually add to local state to immediately show in list
+      // (ensures it appears even if navigation happens before realtime subscription processes)
+      setMembers(prev => [newMember, ...prev]);
+
+      // Refresh search index (ignore errors)
+      try {
+        await supabase.rpc("refresh_member_search_index");
+      } catch (error) {
+        console.error("Failed to refresh search index:", error);
+      }
 
       AuditLogger.log({
         user,
@@ -317,8 +333,15 @@ export function MembersProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      // Refresh search index
-      await supabase.rpc("refresh_member_search_index").catch(console.error);
+      // Refresh search index (ignore errors)
+      try {
+        await supabase.rpc("refresh_member_search_index");
+      } catch (error) {
+        console.error("Failed to refresh search index:", error);
+      }
+
+      // Refresh the members list to show updated data
+      await fetchMembers();
 
       if (oldMember) {
         const changedFields = Object.keys(data).filter(
@@ -361,8 +384,15 @@ export function MembersProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      // Refresh search index
-      await supabase.rpc("refresh_member_search_index").catch(console.error);
+      // Refresh search index (ignore errors)
+      try {
+        await supabase.rpc("refresh_member_search_index");
+      } catch (error) {
+        console.error("Failed to refresh search index:", error);
+      }
+
+      // Refresh the members list to show updated data
+      await fetchMembers();
 
       if (member) {
         AuditLogger.log({

@@ -235,18 +235,9 @@ function ActivityEditContent({ id }: { id: string }) {
 }
 
 export default function ActivityEditPage({ params }: PageProps) {
-  let id: string
-  try {
-    if (params && typeof params === "object" && "then" in params) {
-      const resolvedParams = use(params as Promise<{ id: string }>)
-      id = resolvedParams.id
-    } else {
-      id = (params as { id: string }).id
-    }
-  } catch (error) {
-    console.error("Error unwrapping params:", error)
-    notFound()
-  }
+  // Unwrap params outside of try/catch - React's use() hook requirement
+  const resolvedParams = use(params as Promise<{ id: string }>)
+  const id = resolvedParams.id
 
   return <ActivityEditContent id={id} />
 }

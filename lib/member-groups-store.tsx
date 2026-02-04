@@ -123,8 +123,13 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
       })
 
     if (insertError) {
-      console.error("Failed to add member to group:", insertError)
-      throw new Error(insertError.message)
+      console.error("Failed to add member to group:", {
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+        code: insertError.code
+      })
+      throw new Error(insertError.message || "Failed to add member to group")
     }
 
     AuditLogger.log({
@@ -136,6 +141,9 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
       summary: `Membru adăugat în grup WhatsApp: ${groupId}`,
       metadata: { groupId, action: "group_member_added" },
     })
+    
+    // Refresh member groups to update the UI
+    await fetchMemberGroups()
   }
 
   const removeMemberFromGroup = async (memberId: string, groupId: string) => {
@@ -146,8 +154,13 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
       .eq("group_id", groupId)
 
     if (deleteError) {
-      console.error("Failed to remove member from group:", deleteError)
-      throw new Error(deleteError.message)
+      console.error("Failed to remove member from group:", {
+        message: deleteError.message,
+        details: deleteError.details,
+        hint: deleteError.hint,
+        code: deleteError.code
+      })
+      throw new Error(deleteError.message || "Failed to remove member from group")
     }
 
     AuditLogger.log({
@@ -159,6 +172,9 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
       summary: `Membru eliminat din grup WhatsApp: ${groupId}`,
       metadata: { groupId, action: "group_member_removed" },
     })
+    
+    // Refresh member groups to update the UI
+    await fetchMemberGroups()
   }
 
   const addMemberToGroups = async (memberId: string, groupIds: string[]) => {
@@ -176,8 +192,13 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
         .insert(newMemberships)
 
       if (insertError) {
-        console.error("Failed to add member to groups:", insertError)
-        throw new Error(insertError.message)
+        console.error("Failed to add member to groups:", {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code
+        })
+        throw new Error(insertError.message || "Failed to add member to groups")
       }
 
       AuditLogger.log({
@@ -189,6 +210,9 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
         summary: `${newMemberships.length} grupuri WhatsApp adăugate`,
         metadata: { groupIds, action: "groups_added", count: newMemberships.length },
       })
+      
+      // Refresh member groups to update the UI
+      await fetchMemberGroups()
     }
   }
 
@@ -211,10 +235,17 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
         summary: `${groupIds.length} grupuri WhatsApp eliminate`,
         metadata: { groupIds, action: "groups_removed", count: groupIds.length },
       })
+      
+      // Refresh member groups to update the UI
+      await fetchMemberGroups()
     }
   }
 
   const bulkAddMembersToGroup = async (groupId: string, memberIds: string[], mode: "append" | "replace") => {
+    if (!groupId || !memberIds || memberIds.length === 0) {
+      throw new Error("Invalid parameters: groupId and memberIds are required")
+    }
+
     if (mode === "replace") {
       // Remove all existing members first
       await supabase
@@ -226,11 +257,11 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
     // Add new members (avoiding duplicates)
     const existingIds = new Set(memberGroups.filter((mg) => mg.group_id === groupId).map((mg) => mg.member_id))
     const newMemberships = memberIds
-      .filter((memberId) => mode === "replace" || !existingIds.has(memberId))
+      .filter((memberId) => memberId && (mode === "replace" || !existingIds.has(memberId)))
       .map((memberId) => ({
         member_id: memberId,
         group_id: groupId,
-        added_by: user?.id,
+        added_by: user?.id || null,
       }))
 
     if (newMemberships.length > 0) {
@@ -239,8 +270,13 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
         .insert(newMemberships)
 
       if (insertError) {
-        console.error("Failed to bulk add members to group:", insertError)
-        throw new Error(insertError.message)
+        console.error("Failed to bulk add members to group:", {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code
+        })
+        throw new Error(insertError.message || "Failed to add members to group")
       }
 
       AuditLogger.log({
@@ -259,6 +295,9 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
         },
       })
     }
+    
+    // Refresh member groups to update the UI
+    await fetchMemberGroups()
   }
 
   const bulkRemoveMembersFromGroup = async (groupId: string, memberIds: string[]) => {
@@ -284,6 +323,9 @@ export function MemberGroupsProvider({ children }: { children: ReactNode }) {
           count: memberIds.length,
         },
       })
+      
+      // Refresh member groups to update the UI
+      await fetchMemberGroups()
     }
   }
 

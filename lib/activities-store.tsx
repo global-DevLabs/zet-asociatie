@@ -18,6 +18,7 @@ interface ActivitiesContextType {
   reactivateActivity: (id: string) => Promise<void>
   getActivityById: (id: string) => Activity | undefined
   addParticipants: (activityId: string, memberIds: string[]) => Promise<void>
+  updateParticipant: (activityId: string, memberId: string, updates: Partial<Pick<ActivityParticipant, "status" | "note">>) => Promise<void>
   removeParticipant: (activityId: string, memberId: string) => Promise<void>
   getParticipants: (activityId: string) => ActivityParticipant[]
   getMemberActivities: (memberId: string) => Activity[]
@@ -55,14 +56,15 @@ function activityToDbRow(activity: Partial<Activity>): Record<string, any> {
   const row: Record<string, any> = {}
 
   if (activity.type_id !== undefined) row.type_id = activity.type_id
-  if (activity.title !== undefined) row.title = activity.title
-  if (activity.date_from !== undefined) row.date_from = activity.date_from
-  if (activity.date_to !== undefined) row.date_to = activity.date_to
-  if (activity.location !== undefined) row.location = activity.location
-  if (activity.notes !== undefined) row.notes = activity.notes
+  if (activity.title !== undefined) row.title = activity.title || null
+  // Convert empty string dates to null to avoid PostgreSQL error
+  if (activity.date_from !== undefined) row.date_from = activity.date_from || null
+  if (activity.date_to !== undefined) row.date_to = activity.date_to || null
+  if (activity.location !== undefined) row.location = activity.location || null
+  if (activity.notes !== undefined) row.notes = activity.notes || null
   if (activity.status !== undefined) row.status = activity.status
-  if (activity.archived_at !== undefined) row.archived_at = activity.archived_at
-  if (activity.archived_by !== undefined) row.archived_by = activity.archived_by
+  if (activity.archived_at !== undefined) row.archived_at = activity.archived_at || null
+  if (activity.archived_by !== undefined) row.archived_by = activity.archived_by || null
   if (activity.created_by !== undefined) row.created_by = activity.created_by
 
   return row
@@ -131,7 +133,12 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         .order("name", { ascending: true })
 
       if (fetchError) {
-        console.error("Error fetching activity types:", fetchError)
+        console.error("Error fetching activity types:", {
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code
+        })
         return
       }
 
@@ -144,20 +151,22 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
 
   // Fetch all participants from Supabase
   const fetchParticipants = useCallback(async () => {
+    console.log("[fetchParticipants] Starting fetch")
     try {
       const { data, error: fetchError } = await supabase
         .from("activity_participants")
         .select("*")
 
       if (fetchError) {
-        console.error("Error fetching participants:", fetchError)
+        console.error("[fetchParticipants] Fetch error:", fetchError)
         return
       }
 
       const mappedParticipants = (data || []).map(dbRowToParticipant)
+      console.log("[fetchParticipants] Fetched participants count:", mappedParticipants.length)
       setParticipants(mappedParticipants)
     } catch (err) {
-      console.error("Failed to fetch participants:", err)
+      console.error("[fetchParticipants] Failed to fetch participants:", err)
     }
   }, [supabase])
 
@@ -201,10 +210,24 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         "postgres_changes",
         { event: "*", schema: "public", table: "activity_participants" },
         (payload) => {
+          console.log("[Realtime] Participant event:", payload.eventType, payload)
+          
           if (payload.eventType === "INSERT") {
             const newParticipant = dbRowToParticipant(payload.new)
+            console.log("[Realtime] Adding participant:", newParticipant)
             setParticipants((prev) => [...prev, newParticipant])
+          } else if (payload.eventType === "UPDATE") {
+            const updatedParticipant = dbRowToParticipant(payload.new)
+            console.log("[Realtime] Updating participant:", updatedParticipant)
+            setParticipants((prev) =>
+              prev.map((p) =>
+                p.activity_id === updatedParticipant.activity_id && p.member_id === updatedParticipant.member_id
+                  ? updatedParticipant
+                  : p
+              )
+            )
           } else if (payload.eventType === "DELETE") {
+            console.log("[Realtime] Deleting participant:", payload.old)
             setParticipants((prev) =>
               prev.filter(
                 (p) =>
@@ -263,42 +286,67 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
   }
 
   const createActivity = async (activityData: Omit<Activity, "id" | "created_at" | "updated_at" | "status">) => {
-    const activityId = await generateActivityId()
+    try {
+      const activityId = await generateActivityId()
+      console.log("Generated activity ID:", activityId)
 
-    const dbRow = activityToDbRow(activityData)
-    dbRow.id = activityId
-    dbRow.status = "active"
-    dbRow.created_by = user?.id
+      const dbRow = activityToDbRow(activityData)
+      dbRow.id = activityId
+      dbRow.status = "active"
+      dbRow.created_by = user?.id
 
-    const { data, error: insertError } = await supabase
-      .from("activities")
-      .insert(dbRow)
-      .select()
-      .single()
+      console.log("Data to insert:", dbRow)
 
-    if (insertError || !data) {
-      console.error("Failed to create activity:", insertError)
-      throw new Error(insertError?.message || "Failed to create activity")
+      const { data, error: insertError } = await supabase
+        .from("activities")
+        .insert(dbRow)
+        .select()
+
+      // Check for actual insert failure
+      if (insertError) {
+        console.error("Supabase insert error:", {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code,
+          fullError: insertError
+        })
+        throw new Error(insertError.message || `Database error: ${JSON.stringify(insertError)}`)
+      }
+
+      // Get the inserted activity (data is an array)
+      const insertedData = data && data.length > 0 ? data[0] : null
+      
+      if (!insertedData) {
+        console.error("No data returned after activity insert")
+        throw new Error("No data returned from database")
+      }
+
+      const newActivity = dbRowToActivity(insertedData)
+
+      // Manually add to local state to immediately show in list
+      setActivities((prev) => [newActivity, ...prev])
+
+      AuditLogger.log({
+        user,
+        actionType: "CREATE_ACTIVITY",
+        module: "activities",
+        entityType: "activity",
+        entityId: newActivity.id,
+        entityCode: newActivity.id,
+        summary: `Activitate nouă creată: ${newActivity.title || "Fără titlu"} (${newActivity.id})`,
+        metadata: {
+          type_id: newActivity.type_id,
+          date_from: newActivity.date_from,
+          location: newActivity.location,
+        },
+      })
+
+      return newActivity
+    } catch (error) {
+      console.error("Error in createActivity:", error)
+      throw error
     }
-
-    const newActivity = dbRowToActivity(data)
-
-    AuditLogger.log({
-      user,
-      actionType: "CREATE_ACTIVITY",
-      module: "activities",
-      entityType: "activity",
-      entityId: newActivity.id,
-      entityCode: newActivity.id,
-      summary: `Activitate nouă creată: ${newActivity.title || "Fără titlu"} (${newActivity.id})`,
-      metadata: {
-        type_id: newActivity.type_id,
-        date_from: newActivity.date_from,
-        location: newActivity.location,
-      },
-    })
-
-    return newActivity
   }
 
   const updateActivity = async (id: string, updates: Partial<Activity>) => {
@@ -332,6 +380,9 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         },
       })
     }
+
+    // Refresh activities list to show the updated activity
+    await fetchActivities()
   }
 
   const deleteActivity = async (id: string) => {
@@ -347,6 +398,10 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
       console.error("Failed to delete activity:", deleteError)
       throw new Error(deleteError.message)
     }
+
+    // Manually update local state to immediately reflect the deletion
+    setActivities((prev) => prev.filter((a) => a.id !== id))
+    setParticipants((prev) => prev.filter((p) => p.activity_id !== id))
 
     if (activity) {
       AuditLogger.log({
@@ -364,6 +419,9 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         },
       })
     }
+
+    // Refresh activities list
+    await fetchActivities()
   }
 
   const archiveActivity = async (id: string) => {
@@ -399,6 +457,9 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         },
       })
     }
+
+    // Refresh activities list
+    await fetchActivities()
   }
 
   const reactivateActivity = async (id: string) => {
@@ -434,9 +495,14 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         },
       })
     }
+
+    // Refresh activities list
+    await fetchActivities()
   }
 
   const addParticipants = async (activityId: string, memberIds: string[]) => {
+    console.log("[addParticipants] Starting, activityId:", activityId, "memberIds:", memberIds)
+    
     const existingParticipants = participants.filter(
       (p) => p.activity_id === activityId && memberIds.includes(p.member_id)
     )
@@ -447,7 +513,8 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
     )
 
     if (newMemberIds.length === 0) {
-      return
+      console.log("[addParticipants] No new members to add (all already participants)")
+      throw new Error("Toți membrii selectați sunt deja participanți la această activitate")
     }
 
     const newParticipants = newMemberIds.map((memberId) => ({
@@ -456,14 +523,30 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
       status: "attended" as ActivityParticipantStatus,
     }))
 
-    const { error: insertError } = await supabase
-      .from("activity_participants")
-      .insert(newParticipants)
+    console.log("[addParticipants] Inserting participants:", newParticipants)
+    
+    let data, insertError
+    
+    try {
+      const result = await Promise.race([
+        supabase.from("activity_participants").insert(newParticipants).select(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout: operația a durat prea mult')), 10000)
+        )
+      ]) as any
+      data = result.data
+      insertError = result.error
+    } catch (err: any) {
+      console.error("[addParticipants] Insert timed out or failed:", err)
+      throw new Error(err.message || 'Operația a eșuat')
+    }
 
     if (insertError) {
-      console.error("Failed to add participants:", insertError)
-      throw new Error(insertError.message)
+      console.error("[addParticipants] Insert failed:", insertError)
+      throw new Error(insertError.message || 'Nu s-au putut adăuga participanții')
     }
+
+    console.log("[addParticipants] Insert successful:", data)
 
     const activity = activities.find((a) => a.id === activityId)
     AuditLogger.log({
@@ -479,9 +562,61 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         activityTitle: activity?.title,
       },
     })
+
+    // Optimistically update local state immediately
+    const newParticipantsData = (data || []).map(dbRowToParticipant)
+    setParticipants((prev) => [...prev, ...newParticipantsData])
+    
+    console.log("[addParticipants] Complete - optimistic update applied")
+  }
+
+  const updateParticipant = async (activityId: string, memberId: string, updates: Partial<Pick<ActivityParticipant, "status" | "note">>) => {
+    console.log("[updateParticipant] Starting, activityId:", activityId, "memberId:", memberId, "updates:", updates)
+    
+    const { error: updateError } = await supabase
+      .from("activity_participants")
+      .update(updates)
+      .eq("activity_id", activityId)
+      .eq("member_id", memberId)
+
+    if (updateError) {
+      console.error("[updateParticipant] Update failed:", updateError)
+      throw new Error(updateError.message)
+    }
+
+    console.log("[updateParticipant] Update successful")
+
+    const activity = activities.find((a) => a.id === activityId)
+    AuditLogger.log({
+      user,
+      actionType: "UPDATE_PARTICIPANTS",
+      module: "activities",
+      entityType: "activity",
+      entityId: activityId,
+      entityCode: activityId,
+      summary: `Participant actualizat în activitatea ${activity?.title || activityId}`,
+      metadata: {
+        memberId,
+        updates,
+        activityTitle: activity?.title,
+      },
+    })
+
+    // Optimistically update local state immediately
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.activity_id === activityId && p.member_id === memberId
+          ? { ...p, ...updates }
+          : p
+      )
+    )
+    
+    console.log("[updateParticipant] Complete - optimistic update applied")
   }
 
   const removeParticipant = async (activityId: string, memberId: string) => {
+    console.log("[removeParticipant] Starting, activityId:", activityId, "memberId:", memberId)
+    
     const { error: deleteError } = await supabase
       .from("activity_participants")
       .delete()
@@ -489,9 +624,11 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
       .eq("member_id", memberId)
 
     if (deleteError) {
-      console.error("Failed to remove participant:", deleteError)
+      console.error("[removeParticipant] Delete failed:", deleteError)
       throw new Error(deleteError.message)
     }
+
+    console.log("[removeParticipant] Delete successful")
 
     const activity = activities.find((a) => a.id === activityId)
     AuditLogger.log({
@@ -507,6 +644,13 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         activityTitle: activity?.title,
       },
     })
+
+    // Optimistically update local state immediately
+    setParticipants((prev) =>
+      prev.filter((p) => !(p.activity_id === activityId && p.member_id === memberId))
+    )
+    
+    console.log("[removeParticipant] Complete - optimistic update applied")
   }
 
   const getActivityById = (id: string) => {
@@ -594,6 +738,7 @@ export function ActivitiesProvider({ children }: { children: ReactNode }) {
         reactivateActivity,
         getActivityById,
         addParticipants,
+        updateParticipant,
         removeParticipant,
         getParticipants,
         getMemberActivities,

@@ -14,6 +14,7 @@ import {
   Plus,
   FileText,
   MessageCircle,
+  Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -174,19 +175,34 @@ export function AppSidebar() {
               })}
 
               {hasPermission("settings") && (
-                <Link
-                  href="/audit-log"
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-150",
-                    pathname.startsWith("/audit-log")
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground/80",
-                  )}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <FileText className="h-[18px] w-[18px]" strokeWidth={1.75} />
-                  Activity Monitor
-                </Link>
+                <>
+                  <Link
+                    href="/admin/users"
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-150",
+                      pathname.startsWith("/admin/users")
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground/80",
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <Shield className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                    User Management
+                  </Link>
+                  <Link
+                    href="/audit-log"
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-150",
+                      pathname.startsWith("/audit-log")
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground/80",
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <FileText className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                    Activity Monitor
+                  </Link>
+                </>
               )}
             </div>
           </nav>

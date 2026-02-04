@@ -43,7 +43,7 @@ function GroupsPageContent() {
       memberCount: getGroupMembers(group.id).length,
     }))
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!newGroupName.trim()) {
       toast({
         title: "Eroare",
@@ -53,7 +53,7 @@ function GroupsPageContent() {
       return
     }
 
-    createGroup({
+    await createGroup({
       name: newGroupName.trim(),
       description: newGroupDescription.trim() || undefined,
       status: "Active",

@@ -95,7 +95,7 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
     const paymentInfo = { id: displayPaymentId(deletingPayment.id), amount: deletingPayment.amount }
 
     try {
-      const success = deletePayment(deletingPayment.id)
+      const success = await deletePayment(deletingPayment.id)
       if (success) {
         toast({
           title: "Plată ștearsă",

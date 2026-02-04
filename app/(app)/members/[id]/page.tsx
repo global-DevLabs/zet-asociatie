@@ -40,12 +40,12 @@ function MemberPageContent({ id }: { id: string }) {
       return
     }
 
-    if (members.length > 0 && !isChecked) {
+    if (members.length > 0) {
       const foundMember = getMember(id)
       setMember(foundMember)
       setIsChecked(true)
     }
-  }, [id, members, getMember, isChecked])
+  }, [id, members, getMember])
 
   if (id === "new") {
     return (
@@ -105,18 +105,9 @@ function MemberPageContent({ id }: { id: string }) {
 }
 
 export default function MemberPage({ params }: PageProps) {
-  let id: string
-  try {
-    if (params && typeof params === "object" && "then" in params) {
-      const resolvedParams = use(params)
-      id = resolvedParams.id
-    } else {
-      id = (params as any).id
-    }
-  } catch (error) {
-    console.error("Error unwrapping params:", error)
-    notFound()
-  }
+  // Unwrap params outside of try/catch - React's use() hook requirement
+  const resolvedParams = use(params)
+  const id = resolvedParams.id
 
   return (
     <ProtectedRoute>

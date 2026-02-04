@@ -93,7 +93,10 @@ export function MemberDetailView({ member }: MemberDetailViewProps) {
       if (isNew) {
         await createMember(formData as Omit<Member, "id" | "memberCode">)
       } else {
-        updateMember(member.id, formData)
+        const success = await updateMember(member.id, formData)
+        if (!success) {
+          throw new Error("Failed to update member")
+        }
       }
 
       toast({
@@ -154,14 +157,20 @@ export function MemberDetailView({ member }: MemberDetailViewProps) {
 
   const handleDeleteConfirm = async () => {
     setIsDeleting(true)
+    setShowDeleteDialog(false)
+    
     try {
-      deleteMember(member!.id)
+      // Navigate immediately to prevent 404 from realtime subscription
+      router.push("/members")
+      
+      // Delete the member
+      await deleteMember(member!.id)
+      
+      // Show success toast after navigation
       toast({
         title: "Membru șters",
         description: "Membrul a fost șters cu succes",
       })
-      setShowDeleteDialog(false)
-      router.push("/members")
     } catch (error) {
       toast({
         title: "Eroare",

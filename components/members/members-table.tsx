@@ -72,16 +72,17 @@ export function MembersTable({ data }: MembersTableProps) {
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link href={`/members/${member.id}`}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 hover:bg-primary/10 hover:text-primary transition-all duration-150"
-                    >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 hover:bg-primary/10 hover:text-primary transition-all duration-150"
+                    asChild
+                  >
+                    <Link href={`/members/${member.id}`}>
                       <Eye className="h-3.5 w-3.5 mr-1.5" />
                       Vezi
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </TableCell>
               </TableRow>
             ))

@@ -65,14 +65,23 @@ function GroupDetailContent({ id }: { id: string }) {
     })
   }
 
-  const handleArchiveToggle = () => {
-    updateGroup(id, {
-      status: group.status === "Active" ? "Archived" : "Active",
-    })
-    toast({
-      title: "Succes",
-      description: `Grup ${group.status === "Active" ? "arhivat" : "reactivat"}`,
-    })
+  const handleArchiveToggle = async () => {
+    try {
+      await updateGroup(id, {
+        status: group.status === "Active" ? "Archived" : "Active",
+      })
+      toast({
+        title: "Succes",
+        description: `Grup ${group.status === "Active" ? "arhivat" : "reactivat"}`,
+      })
+    } catch (error) {
+      console.error("Failed to archive/reactivate group:", error)
+      toast({
+        title: "Eroare",
+        description: "Nu s-a putut actualiza grupul. Te rugăm să încerci din nou.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleRemoveMember = async () => {
@@ -244,13 +253,9 @@ function GroupDetailContent({ id }: { id: string }) {
 }
 
 export default function GroupDetailPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
-  let id: string
-  try {
-    const unwrapped = use(params)
-    id = unwrapped.id
-  } catch {
-    id = (params as { id: string }).id
-  }
+  // Unwrap params outside of try/catch - React's use() hook requirement
+  const unwrapped = use(params)
+  const id = unwrapped.id
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-64">Se încarcă...</div>}>

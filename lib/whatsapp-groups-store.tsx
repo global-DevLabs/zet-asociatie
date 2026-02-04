@@ -50,7 +50,12 @@ export function WhatsAppGroupsProvider({ children }: { children: ReactNode }) {
         .order("name", { ascending: true })
 
       if (fetchError) {
-        console.error("Error fetching WhatsApp groups:", fetchError)
+        console.error("Error fetching WhatsApp groups:", {
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code
+        })
         setError(fetchError.message)
         return
       }
@@ -135,14 +140,27 @@ export function WhatsAppGroupsProvider({ children }: { children: ReactNode }) {
         status: groupData.status || "Active",
       })
       .select()
-      .single()
 
-    if (insertError || !data) {
+    // Check for actual insert failure
+    if (insertError) {
       console.error("Failed to create WhatsApp group:", insertError)
-      throw new Error(insertError?.message || "Failed to create group")
+      throw new Error(insertError.message || "Failed to create group")
     }
 
-    return dbRowToGroup(data)
+    // Get the inserted group (data is an array)
+    const insertedData = data && data.length > 0 ? data[0] : null
+    
+    if (!insertedData) {
+      console.error("No data returned after group insert")
+      throw new Error("Failed to retrieve created group data")
+    }
+
+    const newGroup = dbRowToGroup(insertedData)
+    
+    // Manually add to local state to immediately show in list
+    setGroups((prev) => [newGroup, ...prev])
+
+    return newGroup
   }
 
   const updateGroup = async (id: string, updates: Partial<WhatsAppGroup>): Promise<void> => {
@@ -155,9 +173,17 @@ export function WhatsAppGroupsProvider({ children }: { children: ReactNode }) {
       .eq("id", id)
 
     if (updateError) {
-      console.error("Failed to update WhatsApp group:", updateError)
-      throw new Error(updateError.message)
+      console.error("Failed to update WhatsApp group:", {
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+        code: updateError.code
+      })
+      throw new Error(updateError.message || "Failed to update group")
     }
+    
+    // Refresh groups to update the UI
+    await fetchGroups()
   }
 
   const deleteGroup = async (id: string): Promise<void> => {
@@ -167,9 +193,17 @@ export function WhatsAppGroupsProvider({ children }: { children: ReactNode }) {
       .eq("id", id)
 
     if (deleteError) {
-      console.error("Failed to delete WhatsApp group:", deleteError)
-      throw new Error(deleteError.message)
+      console.error("Failed to delete WhatsApp group:", {
+        message: deleteError.message,
+        details: deleteError.details,
+        hint: deleteError.hint,
+        code: deleteError.code
+      })
+      throw new Error(deleteError.message || "Failed to delete group")
     }
+    
+    // Manually update local state to immediately reflect the deletion
+    setGroups((prev) => prev.filter((g) => g.id !== id))
   }
 
   const getGroupById = (id: string) => {

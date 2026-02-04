@@ -34,13 +34,13 @@ export function WhatsAppGroupsManager() {
     return getGroupMembers(groupId).length
   }
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!formData.name.trim()) {
       toast({ title: "Eroare", description: "Numele grupului este obligatoriu", variant: "destructive" })
       return
     }
 
-    createGroup({
+    await createGroup({
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
       status: "Active",
@@ -51,13 +51,13 @@ export function WhatsAppGroupsManager() {
     toast({ title: "Succes", description: "Grupul WhatsApp a fost adăugat" })
   }
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!editingGroup || !formData.name.trim()) {
       toast({ title: "Eroare", description: "Numele grupului este obligatoriu", variant: "destructive" })
       return
     }
 
-    updateGroup(editingGroup.id, {
+    await updateGroup(editingGroup.id, {
       name: formData.name.trim(),
       description: formData.description.trim() || undefined,
     })
@@ -67,16 +67,16 @@ export function WhatsAppGroupsManager() {
     toast({ title: "Succes", description: "Grupul WhatsApp a fost actualizat" })
   }
 
-  const handleToggleStatus = (group: WhatsAppGroup) => {
+  const handleToggleStatus = async (group: WhatsAppGroup) => {
     const newStatus = group.status === "Active" ? "Archived" : "Active"
-    updateGroup(group.id, { status: newStatus })
+    await updateGroup(group.id, { status: newStatus })
     toast({
       title: "Succes",
       description: `Grupul a fost ${newStatus === "Archived" ? "arhivat" : "reactivat"}`,
     })
   }
 
-  const handleDelete = (group: WhatsAppGroup) => {
+  const handleDelete = async (group: WhatsAppGroup) => {
     const memberCount = getMemberCount(group.id)
     if (memberCount > 0) {
       toast({
@@ -88,7 +88,7 @@ export function WhatsAppGroupsManager() {
     }
 
     if (confirm(`Sigur doriți să ștergeți grupul "${group.name}"?`)) {
-      deleteGroup(group.id)
+      await deleteGroup(group.id)
       toast({ title: "Succes", description: "Grupul WhatsApp a fost șters" })
     }
   }

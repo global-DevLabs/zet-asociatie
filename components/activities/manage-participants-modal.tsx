@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,11 +28,29 @@ interface ManageParticipantsModalProps {
 }
 
 export function ManageParticipantsModal({ open, onClose, activityId, activityTitle }: ManageParticipantsModalProps) {
-  const { getParticipants, addParticipants, removeParticipant } = useActivities()
+  const { getParticipants, addParticipants, updateParticipant, removeParticipant } = useActivities()
   const { members } = useMembers()
   const { toast } = useToast()
 
-  const [participants, setParticipants] = useState(getParticipants(activityId))
+  // Memoize participants with content-based comparison to prevent unnecessary re-renders
+  // We need to get fresh data on every render, then compare to see if it actually changed
+  const rawParticipants = getParticipants(activityId)
+  const participantsRef = useRef<typeof rawParticipants>([])
+  
+  // Create a stable key from the participants for comparison
+  const participantsKey = useMemo(() => {
+    return rawParticipants
+      .map(p => `${p.member_id}:${p.status}`)
+      .sort()
+      .join('|')
+  }, [rawParticipants])
+  
+  // Only update the stable reference when the key changes
+  const participants = useMemo(() => {
+    participantsRef.current = rawParticipants
+    return participantsRef.current
+  }, [participantsKey, rawParticipants])
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
@@ -40,6 +58,7 @@ export function ManageParticipantsModal({ open, onClose, activityId, activityTit
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
+  const [updatingParticipant, setUpdatingParticipant] = useState<string | null>(null)
 
   // Debounce search input
   useEffect(() => {
@@ -47,16 +66,13 @@ export function ManageParticipantsModal({ open, onClose, activityId, activityTit
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  // Refresh participants when activity changes or modal opens
-  const refreshParticipants = useCallback(() => {
-    setParticipants(getParticipants(activityId))
-  }, [activityId, getParticipants])
-
+  // Reset search when modal closes
   useEffect(() => {
-    if (open) {
-      refreshParticipants()
+    if (!open) {
+      setSearchTerm("")
+      setSelectedMembers([])
     }
-  }, [open, refreshParticipants])
+  }, [open])
 
   const getMemberName = useCallback((memberId: string) => {
     const member = members.find((m) => m.id === memberId)
@@ -70,7 +86,7 @@ export function ManageParticipantsModal({ open, onClose, activityId, activityTit
       const name = getMemberName(p.member_id).toLowerCase()
       return name.includes(debouncedSearch.toLowerCase())
     })
-  }, [participants, debouncedSearch])
+  }, [participants, debouncedSearch, getMemberName])
 
   const handleAddParticipants = async () => {
     if (selectedMembers.length === 0) {
@@ -84,19 +100,17 @@ export function ManageParticipantsModal({ open, onClose, activityId, activityTit
 
     setIsAdding(true)
     try {
+      const count = selectedMembers.length
       await addParticipants(activityId, selectedMembers)
       setSelectedMembers([])
-      // Refresh after a small delay to ensure state updates
-      setTimeout(() => {
-        refreshParticipants()
-      }, 100)
       toast({
         title: "Participanți adăugați",
-        description: `${selectedMembers.length} ${selectedMembers.length === 1 ? "participant adăugat" : "participanți adăugați"} cu succes`,
+        description: `${count} ${count === 1 ? "participant adăugat" : "participanți adăugați"} cu succes`,
       })
     } catch (error) {
+      console.error("Error adding participants:", error)
       toast({
-        title: "Eroare",
+        title: "Eroare la adăugare",
         description: error instanceof Error ? error.message : "Nu s-au putut adăuga participanții",
         variant: "destructive",
       })
@@ -116,24 +130,51 @@ export function ManageParticipantsModal({ open, onClose, activityId, activityTit
     setIsRemoving(true)
     try {
       await removeParticipant(activityId, memberToRemove)
-      // Refresh after a small delay to ensure state updates
-      setTimeout(() => {
-        refreshParticipants()
-      }, 100)
       toast({
         title: "Participant eliminat",
         description: "Participantul a fost eliminat din activitate",
       })
+      setRemoveConfirmOpen(false)
+      setMemberToRemove(null)
     } catch (error) {
+      console.error("Error removing participant:", error)
       toast({
-        title: "Eroare",
+        title: "Eroare la eliminare",
         description: error instanceof Error ? error.message : "Nu s-a putut elimina participantul",
         variant: "destructive",
       })
     } finally {
       setIsRemoving(false)
-      setRemoveConfirmOpen(false)
-      setMemberToRemove(null)
+    }
+  }
+
+  const handleStatusChange = async (memberId: string, currentStatus: string) => {
+    // Cycle through statuses: attended -> organizer -> invited -> attended
+    const statusCycle: Record<string, string> = {
+      attended: "organizer",
+      organizer: "invited",
+      invited: "attended",
+    }
+    const newStatus = statusCycle[currentStatus] || "attended"
+
+    setUpdatingParticipant(memberId)
+    try {
+      await updateParticipant(activityId, memberId, { status: newStatus as any })
+      toast({
+        title: "Status actualizat",
+        description: `Statusul participantului a fost schimbat în ${
+          newStatus === "attended" ? "Participant" : newStatus === "organizer" ? "Organizator" : "Invitat"
+        }`,
+      })
+    } catch (error) {
+      console.error("Error updating participant status:", error)
+      toast({
+        title: "Eroare la actualizare",
+        description: error instanceof Error ? error.message : "Nu s-a putut actualiza statusul",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingParticipant(null)
     }
   }
 
@@ -207,7 +248,15 @@ export function ManageParticipantsModal({ open, onClose, activityId, activityTit
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge
+                            variant="secondary"
+                            className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                            onClick={() => handleStatusChange(participant.member_id, participant.status)}
+                            title="Click pentru a schimba statusul"
+                          >
+                            {updatingParticipant === participant.member_id ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            ) : null}
                             {participant.status === "attended"
                               ? "Participant"
                               : participant.status === "organizer"

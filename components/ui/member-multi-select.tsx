@@ -37,11 +37,13 @@ export function MemberMultiSelect({
   const inputRef = useRef<HTMLInputElement>(null)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
+  const [isInsideDialog, setIsInsideDialog] = useState(false)
 
   // Find portal container - prefer dialog content for proper z-index layering inside modals
   useEffect(() => {
     if (typeof document === "undefined") return
     const dialogContent = triggerRef.current?.closest("[data-slot='dialog-content']") as HTMLElement | null
+    setIsInsideDialog(!!dialogContent)
     setPortalContainer(dialogContent || document.body)
   }, [open])
 
@@ -74,16 +76,60 @@ export function MemberMultiSelect({
 
   // Position dropdown relative to trigger
   useEffect(() => {
-    if (open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect()
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-      })
+    if (open && triggerRef.current && portalContainer) {
+      const triggerRect = triggerRef.current.getBoundingClientRect()
+      
+      // If inside dialog, use relative positioning to dialog content
+      if (isInsideDialog) {
+        const dialogContent = portalContainer
+        const dialogRect = dialogContent.getBoundingClientRect()
+        
+        // Account for dialog's scroll position
+        const scrollTop = dialogContent.scrollTop
+        const scrollLeft = dialogContent.scrollLeft
+        
+        // Calculate position relative to dialog, accounting for scroll
+        const relativeTop = triggerRect.bottom - dialogRect.top + scrollTop + 4
+        const relativeLeft = triggerRect.left - dialogRect.left + scrollLeft
+        
+        setDropdownPosition({
+          top: relativeTop,
+          left: relativeLeft,
+          width: triggerRect.width,
+        })
+      } else {
+        // Use viewport positioning for non-dialog contexts
+        const viewportWidth = window.innerWidth
+        const viewportHeight = window.innerHeight
+        const dropdownMaxHeight = Math.min(400, viewportHeight * 0.6)
+        
+        let left = triggerRect.left
+        const dropdownWidth = triggerRect.width
+        
+        if (left + dropdownWidth > viewportWidth - 16) {
+          left = Math.max(16, viewportWidth - dropdownWidth - 16)
+        }
+        left = Math.max(16, left)
+        
+        let top = triggerRect.bottom + 4
+        
+        if (top + dropdownMaxHeight > viewportHeight - 16) {
+          top = triggerRect.top - dropdownMaxHeight - 4
+          if (top < 16) {
+            top = 16
+          }
+        }
+        
+        setDropdownPosition({
+          top,
+          left,
+          width: triggerRect.width,
+        })
+      }
+      
       setTimeout(() => inputRef.current?.focus(), 0)
     }
-  }, [open])
+  }, [open, portalContainer, isInsideDialog])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -118,6 +164,80 @@ export function MemberMultiSelect({
     return () => document.removeEventListener("keydown", handleEscape)
   }, [open])
 
+  // Reposition dropdown on scroll or resize
+  useEffect(() => {
+    if (!open || !triggerRef.current || !portalContainer) return
+
+    const updatePosition = () => {
+      if (!triggerRef.current || !portalContainer) return
+      
+      const triggerRect = triggerRef.current.getBoundingClientRect()
+      
+      if (isInsideDialog) {
+        const dialogContent = portalContainer
+        const dialogRect = dialogContent.getBoundingClientRect()
+        
+        // Account for dialog's scroll position
+        const scrollTop = dialogContent.scrollTop
+        const scrollLeft = dialogContent.scrollLeft
+        
+        // Calculate position relative to dialog, accounting for scroll
+        const relativeTop = triggerRect.bottom - dialogRect.top + scrollTop + 4
+        const relativeLeft = triggerRect.left - dialogRect.left + scrollLeft
+        
+        setDropdownPosition({
+          top: relativeTop,
+          left: relativeLeft,
+          width: triggerRect.width,
+        })
+      } else {
+        const viewportWidth = window.innerWidth
+        const viewportHeight = window.innerHeight
+        const dropdownMaxHeight = Math.min(400, viewportHeight * 0.6)
+        
+        let left = triggerRect.left
+        const dropdownWidth = triggerRect.width
+        
+        if (left + dropdownWidth > viewportWidth - 16) {
+          left = Math.max(16, viewportWidth - dropdownWidth - 16)
+        }
+        left = Math.max(16, left)
+        
+        let top = triggerRect.bottom + 4
+        
+        if (top + dropdownMaxHeight > viewportHeight - 16) {
+          top = triggerRect.top - dropdownMaxHeight - 4
+          if (top < 16) {
+            top = 16
+          }
+        }
+        
+        setDropdownPosition({
+          top,
+          left,
+          width: triggerRect.width,
+        })
+      }
+    }
+
+    // Listen to scroll events globally with capture to catch dialog scroll
+    window.addEventListener("scroll", updatePosition, true)
+    window.addEventListener("resize", updatePosition)
+    
+    // Also specifically listen to the dialog's scroll if inside one
+    if (isInsideDialog && portalContainer) {
+      portalContainer.addEventListener("scroll", updatePosition)
+    }
+    
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true)
+      window.removeEventListener("resize", updatePosition)
+      if (isInsideDialog && portalContainer) {
+        portalContainer.removeEventListener("scroll", updatePosition)
+      }
+    }
+  }, [open, portalContainer, isInsideDialog])
+
   return (
     <div className="space-y-2" ref={containerRef}>
       <Button
@@ -148,7 +268,10 @@ export function MemberMultiSelect({
         createPortal(
           <div
             ref={dropdownRef}
-            className="fixed z-[9999] rounded-md border bg-popover shadow-lg pointer-events-auto flex flex-col"
+            className={cn(
+              "z-[9999] rounded-md border bg-popover shadow-lg pointer-events-auto flex flex-col",
+              isInsideDialog ? "absolute" : "fixed"
+            )}
             style={{
               top: dropdownPosition.top,
               left: dropdownPosition.left,
