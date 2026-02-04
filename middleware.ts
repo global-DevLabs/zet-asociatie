@@ -21,6 +21,11 @@ function looksLikeJwt(value: string): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Never redirect API routes — let them return 401 JSON. Otherwise fetch() gets HTML and .json() throws.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   if (isPublic(pathname)) {
     const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
     if (token && looksLikeJwt(token) && pathname === "/login") {

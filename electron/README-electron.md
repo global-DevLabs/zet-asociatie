@@ -4,6 +4,31 @@
 - `electron/postgres-setup.js` – first-run logic: initdb, create DB, run migrations, write config (when Postgres is bundled).
 - `electron/preload.js` – preload with `contextIsolation: true`, no Node in renderer.
 
+### Build standalone on Windows (for Windows)
+
+Do this **on a Windows machine** to produce a Windows installer (standalone app):
+
+1. **Prerequisites:** Node.js (v18+) and npm on Windows.
+2. **Clone and install:**
+   ```bash
+   cd zet-asociatie
+   npm install --legacy-peer-deps
+   ```
+3. **Next.js standalone build:**
+   ```bash
+   npm run build
+   ```
+4. **(Optional) Bundle PostgreSQL** so the app installs Postgres on first run:
+   - Download [PostgreSQL 17 Windows x64](https://www.postgresql.org/download/windows/) (e.g. EnterpriseDB zip).
+   - Extract so `resources/postgres-win/bin/` contains `initdb.exe` and `postgres.exe` (see `resources/postgres-win/README.txt`).
+5. **Build the Windows installer:**
+   ```bash
+   npm run electron:build
+   ```
+6. **Output:** `dist-electron/` — e.g. NSIS installer (`.exe`) for Windows x64. Run it on the target PC to install the standalone app.
+
+On first launch, if Postgres was bundled, the app will set up the DB and config under `%APPDATA%\Zet Asociatie\`; otherwise configure an existing Postgres or env.
+
 ### First-run Postgres install (packaged app)
 
 When the app is built **with** PostgreSQL binaries bundled:

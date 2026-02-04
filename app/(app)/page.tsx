@@ -5,18 +5,79 @@ import { PageContainer } from "@/components/layout/page-container"
 
 export const dynamic = 'force-dynamic'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, UserMinus, Wallet, TrendingUp, ArrowUpRight, PieChart, Building2, UserPlus, Receipt, FileEdit } from "lucide-react"
+import { Users, UserMinus, Wallet, TrendingUp, PieChart, Building2, UserPlus, Receipt, FileEdit, Calendar, LogIn, LogOut, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMembers } from "@/lib/members-store"
 import { usePayments } from "@/lib/payments-store"
+import { useAuditLogs } from "@/lib/audit-log-store"
+import type { AuditLog } from "@/types"
+import type { LucideIcon } from "lucide-react"
+
+function formatRelativeTimeRo(isoDate: string): string {
+  const d = new Date(isoDate)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffM = Math.floor(diffMs / 60000)
+  const diffH = Math.floor(diffMs / 3600000)
+  const diffD = Math.floor(diffMs / 86400000)
+  if (diffM < 1) return "Acum"
+  if (diffM < 60) return `Acum ${diffM} min`
+  if (diffH < 24) return `Acum ${diffH}h`
+  if (diffD === 1) return "Ieri"
+  if (diffD < 7) return `Acum ${diffD} zile`
+  return d.toLocaleDateString("ro-RO", { day: "numeric", month: "short" })
+}
+
+type RecentActivityItem = {
+  action: string
+  detail: string
+  time: string
+  type: "member" | "payment" | "update" | "activity" | "auth"
+  icon: LucideIcon
+}
+
+function auditLogToRecentItem(log: AuditLog): RecentActivityItem | null {
+  const summary = log.summary || ""
+  const time = formatRelativeTimeRo(log.timestamp)
+  const map: Record<string, { action: string; type: RecentActivityItem["type"]; icon: LucideIcon }> = {
+    CREATE_MEMBER: { action: "Membru nou înregistrat", type: "member", icon: UserPlus },
+    UPDATE_MEMBER: { action: "Membru actualizat", type: "update", icon: FileEdit },
+    DELETE_MEMBER: { action: "Membru șters", type: "member", icon: Trash2 },
+    CREATE_PAYMENT: { action: "Cotizație primită", type: "payment", icon: Receipt },
+    UPDATE_PAYMENT: { action: "Plată actualizată", type: "payment", icon: Receipt },
+    DELETE_PAYMENT: { action: "Plată ștearsă", type: "payment", icon: Receipt },
+    CREATE_ACTIVITY: { action: "Activitate nouă", type: "activity", icon: Calendar },
+    UPDATE_ACTIVITY: { action: "Activitate actualizată", type: "activity", icon: FileEdit },
+    DELETE_ACTIVITY: { action: "Activitate ștearsă", type: "activity", icon: Trash2 },
+    ARCHIVE_ACTIVITY: { action: "Activitate arhivată", type: "activity", icon: Calendar },
+    REACTIVATE_ACTIVITY: { action: "Activitate reactivată", type: "activity", icon: Calendar },
+    ADD_PARTICIPANTS: { action: "Participanți adăugați", type: "activity", icon: UserPlus },
+    REMOVE_PARTICIPANTS: { action: "Participanți eliminați", type: "activity", icon: UserMinus },
+    UPDATE_VALUE_LIST: { action: "Setări actualizate", type: "update", icon: FileEdit },
+    LOGIN: { action: "Autentificare", type: "auth", icon: LogIn },
+    LOGOUT: { action: "Deconectare", type: "auth", icon: LogOut },
+  }
+  const entry = map[log.actionType]
+  if (!entry || log.isError) return null
+  return { ...entry, detail: summary, time }
+}
 
 export default function DashboardPage() {
   const { members } = useMembers()
   const { getAllPayments } = usePayments()
+  const { logs: auditLogs, isLoading: auditLogsLoading } = useAuditLogs()
   const allPayments = getAllPayments()
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState(currentYear.toString())
+
+  const recentActivityItems = useMemo(() => {
+    return auditLogs
+      .filter((log) => log.actionType !== "LOGIN_FAILED")
+      .slice(0, 10)
+      .map(auditLogToRecentItem)
+      .filter((item): item is RecentActivityItem => item !== null)
+  }, [auditLogs])
 
   // Calculate stats from members data
   const totalMembers = members.length
@@ -450,30 +511,13 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="pt-4">
+            {auditLogsLoading ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <span className="text-sm">Se încarcă activitatea...</span>
+              </div>
+            ) : (
             <div className="space-y-2">
-              {[
-                {
-                  action: "Membru nou înregistrat",
-                  detail: "Popescu Ion a fost adăugat în sistem",
-                  time: "Acum 2h",
-                  type: "member",
-                  icon: UserPlus,
-                },
-                {
-                  action: "Cotizație primită",
-                  detail: "Ionescu Maria - 500 RON pentru 2024",
-                  time: "Acum 4h",
-                  type: "payment",
-                  icon: Receipt,
-                },
-                {
-                  action: "Profil actualizat",
-                  detail: "Vasilescu George și-a actualizat datele",
-                  time: "Ieri",
-                  type: "update",
-                  icon: FileEdit,
-                },
-              ].map((item, i) => {
+              {recentActivityItems.map((item, i) => {
                 const Icon = item.icon
                 return (
                   <div
@@ -483,7 +527,11 @@ export default function DashboardPage() {
                         ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200/50 hover:border-emerald-300 hover:shadow-md"
                         : item.type === "payment"
                           ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50 hover:border-blue-300 hover:shadow-md"
-                          : "bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200/50 hover:border-slate-300 hover:shadow-md"
+                          : item.type === "activity"
+                            ? "bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200/50 hover:border-violet-300 hover:shadow-md"
+                            : item.type === "auth"
+                              ? "bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200/50 hover:border-slate-300 hover:shadow-md"
+                              : "bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200/50 hover:border-slate-300 hover:shadow-md"
                     }`}
                   >
                     <div
@@ -492,7 +540,11 @@ export default function DashboardPage() {
                           ? "bg-gradient-to-br from-emerald-500 to-teal-500 group-hover:from-emerald-600 group-hover:to-teal-600"
                           : item.type === "payment"
                             ? "bg-gradient-to-br from-blue-500 to-indigo-500 group-hover:from-blue-600 group-hover:to-indigo-600"
-                            : "bg-gradient-to-br from-slate-500 to-gray-500 group-hover:from-slate-600 group-hover:to-gray-600"
+                            : item.type === "activity"
+                              ? "bg-gradient-to-br from-violet-500 to-purple-500 group-hover:from-violet-600 group-hover:to-purple-600"
+                              : item.type === "auth"
+                                ? "bg-gradient-to-br from-slate-500 to-slate-600 group-hover:from-slate-600 group-hover:to-slate-700"
+                                : "bg-gradient-to-br from-slate-500 to-gray-500 group-hover:from-slate-600 group-hover:to-gray-600"
                       } transition-all duration-200 group-hover:scale-110`}
                     >
                       <Icon className="h-6 w-6 text-white" />
@@ -505,7 +557,11 @@ export default function DashboardPage() {
                             ? "bg-emerald-100 text-emerald-700"
                             : item.type === "payment"
                               ? "bg-blue-100 text-blue-700"
-                              : "bg-slate-100 text-slate-700"
+                              : item.type === "activity"
+                                ? "bg-violet-100 text-violet-700"
+                                : item.type === "auth"
+                                  ? "bg-slate-100 text-slate-700"
+                                  : "bg-slate-100 text-slate-700"
                         }`}>
                           {item.time}
                         </span>
@@ -516,7 +572,8 @@ export default function DashboardPage() {
                 )
               })}
             </div>
-            {members.length === 0 && (
+            )}
+            {!auditLogsLoading && recentActivityItems.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl border-2 border-dashed border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50">
                 <div className="rounded-full bg-gradient-to-br from-slate-100 to-blue-100 p-4 mb-3 shadow-md">
                   <FileEdit className="h-7 w-7 text-slate-600" />

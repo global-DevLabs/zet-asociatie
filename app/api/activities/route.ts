@@ -50,15 +50,27 @@ export async function POST(request: NextRequest) {
       if (m) maxNum = parseInt(m[1], 10);
     }
     const activityId = `ACT-${String(maxNum + 1).padStart(4, "0")}`;
+    const typeId =
+      body.type_id != null && body.type_id !== ""
+        ? parseInt(String(body.type_id), 10)
+        : null;
+    const dateFrom =
+      body.date_from != null && body.date_from !== ""
+        ? String(body.date_from).slice(0, 10)
+        : null;
+    const dateTo =
+      body.date_to != null && body.date_to !== ""
+        ? String(body.date_to).slice(0, 10)
+        : null;
     await dbQuery(
       `INSERT INTO activities (id, type_id, title, date_from, date_to, location, notes, status, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)`,
       [
         activityId,
-        body.type_id ?? null,
+        typeId !== null && !Number.isNaN(typeId) ? typeId : null,
         body.title ?? null,
-        body.date_from ?? null,
-        body.date_to ?? null,
+        dateFrom,
+        dateTo,
         body.location ?? null,
         body.notes ?? null,
         payload.sub,
@@ -84,8 +96,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("Create activity error:", err);
+    const message =
+      err instanceof Error ? err.message : "Failed to create activity";
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed" },
+      { error: message },
       { status: 500 }
     );
   }
