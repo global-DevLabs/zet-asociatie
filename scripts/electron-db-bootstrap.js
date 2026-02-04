@@ -56,8 +56,10 @@ async function runBootstrap(options) {
     // Database already exists (e.g. from a previous run); continue to set password and config
   }
 
+  // Use literal in SQL (escape single quotes) so older Postgres builds accept it; $1 can cause "syntax error at or near $1"
+  const passwordEscaped = password.replace(/'/g, "''");
   try {
-    await client.query("ALTER USER postgres WITH PASSWORD $1", [password]);
+    await client.query(`ALTER USER postgres WITH PASSWORD '${passwordEscaped}'`);
   } catch (err) {
     console.error("ALTER USER postgres failed:", err.message);
     await client.end();
