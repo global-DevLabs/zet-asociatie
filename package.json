@@ -48,8 +48,6 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "jsonwebtoken": "^9.0.2",
@@ -71,6 +69,8 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.7",
