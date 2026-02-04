@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/jwt";
 
-const publicPaths = ["/login"];
+const publicPaths = ["/login", "/setup"];
 const apiAuthPaths = ["/api/auth/login", "/api/auth/register"];
 
 function isPublic(pathname: string): boolean {
@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
 
   if (isPublic(pathname)) {
     const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-    if (token && looksLikeJwt(token) && pathname === "/login") {
+    if (token && looksLikeJwt(token) && (pathname === "/login" || pathname === "/setup")) {
       const url = request.nextUrl.clone();
       url.pathname = request.nextUrl.searchParams.get("callbackUrl") || "/";
       url.searchParams.delete("callbackUrl");

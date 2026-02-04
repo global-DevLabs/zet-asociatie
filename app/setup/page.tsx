@@ -2,8 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,64 +13,74 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Settings } from "lucide-react";
 
-function LoginForm() {
+function SetupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [checkingSetup, setCheckingSetup] = useState(true);
-  const { login, isAuthenticated } = useAuth();
+  const [checking, setChecking] = useState(true);
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  // Redirect if authenticated; otherwise check if first-run setup is needed
   useEffect(() => {
-    if (isAuthenticated) {
-      const callbackUrl = searchParams.get("callbackUrl") || "/";
-      router.replace(callbackUrl);
-      return;
-    }
     let mounted = true;
-    fetch("/api/setup", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (mounted) {
-          if (data.setupRequired) {
-            router.replace("/setup");
-          } else {
-            setCheckingSetup(false);
-          }
+    async function check() {
+      try {
+        const res = await fetch("/api/setup", { credentials: "include" });
+        const data = await res.json();
+        if (mounted && !data.setupRequired) {
+          router.replace("/login");
+          return;
         }
-      })
-      .catch(() => {
-        if (mounted) setCheckingSetup(false);
-      });
+      } catch {
+        // Assume setup required on error (e.g. DB not ready)
+      } finally {
+        if (mounted) setChecking(false);
+      }
+    }
+    check();
     return () => {
       mounted = false;
     };
-  }, [isAuthenticated, router, searchParams]);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (password !== confirmPassword) {
+      setError("Parolele nu coincid.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Parola trebuie să aibă cel puțin 8 caractere.");
+      return;
+    }
     setSubmitting(true);
 
-    const result = await login(email, password);
+    try {
+      const res = await fetch("/api/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
 
-    if (!result.success) {
-      setError(result.error || "Email sau parolă incorectă");
+      if (!res.ok) {
+        setError(data.error || "Configurare eșuată.");
+        setSubmitting(false);
+        return;
+      }
+      router.replace("/login");
+    } catch {
+      setError("A apărut o eroare. Încercați din nou.");
       setSubmitting(false);
-    } else {
-      // Login successful - redirect immediately
-      const callbackUrl = searchParams.get("callbackUrl") || "/";
-      router.replace(callbackUrl);
     }
   };
 
-  // If authenticated or still checking setup, show spinner
-  if (isAuthenticated || checkingSetup) {
+  if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -84,25 +93,25 @@ function LoginForm() {
       <Card className="w-full max-w-md shadow-lg border-0">
         <CardHeader className="space-y-2 text-center pb-8">
           <div className="mx-auto w-16 h-16 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center mb-4 shadow-md">
-            <span className="text-2xl font-bold text-white">A</span>
+            <Settings className="h-8 w-8 text-white" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">
-            Autentificare
+            Configurare inițială
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            Sistem de Management Asociație
+            Creați contul de administrator. Acest pas se face o singură dată.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
-                Email
+                Email administrator
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="email@exemplu.ro"
+                placeholder="admin@exemplu.ro"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
@@ -121,7 +130,27 @@ function LoginForm() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                autoComplete="current-password"
+                minLength={8}
+                autoComplete="new-password"
+                className="h-11 shadow-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Minimum 8 caractere.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                Confirmare parolă
+              </Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="new-password"
                 className="h-11 shadow-sm"
               />
             </div>
@@ -138,7 +167,7 @@ function LoginForm() {
               className="w-full h-11 shadow-md"
               disabled={submitting}
             >
-              {submitting ? "Se autentifică..." : "Autentificare"}
+              {submitting ? "Se creează contul..." : "Creează cont administrator"}
             </Button>
           </form>
         </CardContent>
@@ -147,7 +176,7 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
+export default function SetupPage() {
   return (
     <Suspense
       fallback={
@@ -156,7 +185,7 @@ export default function LoginPage() {
         </div>
       }
     >
-      <LoginForm />
+      <SetupForm />
     </Suspense>
   );
 }
