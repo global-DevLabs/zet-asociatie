@@ -101,17 +101,14 @@ function startNextStandaloneServer() {
     return;
   }
 
-  const serverEntry = path.join(
-    process.cwd(),
-    ".next",
-    "standalone",
-    "server.js",
-  );
+  const standaloneDir = path.join(process.cwd(), ".next", "standalone");
+  const serverEntry = path.join(standaloneDir, "server.js");
 
   nextServerProcess = spawn(
     process.execPath,
     [serverEntry],
     {
+      cwd: standaloneDir,
       env: {
         ...process.env,
         PORT: String(NEXT_PROD_PORT),

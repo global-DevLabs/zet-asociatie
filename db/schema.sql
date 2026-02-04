@@ -12,10 +12,14 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS profiles (
   id uuid PRIMARY KEY,
-  email text UNIQUE,
-  full_name text,
-  role text DEFAULT 'viewer',
-  created_at timestamptz NOT NULL DEFAULT now()
+  full_name text NOT NULL,
+  email text NOT NULL,
+  role text NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'editor', 'viewer')),
+  phone text,
+  notes text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid
 );
 
 -- MEMBERS -------------------------------------------------------------------
@@ -25,16 +29,19 @@ CREATE TABLE IF NOT EXISTS members (
   member_code text UNIQUE NOT NULL,
   status text NOT NULL DEFAULT 'Activ',
   rank text,
-  first_name text,
-  last_name text,
+  first_name text NOT NULL,
+  last_name text NOT NULL,
   date_of_birth date,
-  cnp varchar(32),
+  cnp text,
   birthplace text,
   unit text,
   main_profile text,
   retirement_year integer,
   retirement_decision_number text,
   retirement_file_number text,
+  branch_enrollment_date date,
+  branch_withdrawal_date date,
+  years_of_service integer DEFAULT 0,
   branch_enrollment_year integer,
   branch_withdrawal_year integer,
   branch_withdrawal_reason text,
@@ -53,15 +60,23 @@ CREATE TABLE IF NOT EXISTS members (
   car_member_status text,
   foundation_member_status text,
   foundation_role text,
-  has_current_workplace boolean,
+  has_current_workplace text,
   current_workplace text,
   other_observations text,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz
+  updated_at timestamptz DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS members_member_code_idx ON members (member_code);
 CREATE INDEX IF NOT EXISTS members_last_first_name_idx ON members (last_name, first_name);
+
+-- COUNTERS (for get_next_member_code / get_next_payment_code) ---------------
+
+CREATE TABLE IF NOT EXISTS counters (
+  entity_type text PRIMARY KEY,
+  current_value integer NOT NULL DEFAULT 0,
+  updated_at timestamptz DEFAULT now()
+);
 
 -- UM UNITS (settings) -------------------------------------------------------
 
@@ -80,7 +95,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_groups (
   id text PRIMARY KEY, -- e.g. wag-001
   name text NOT NULL UNIQUE,
   description text,
-  status text NOT NULL DEFAULT 'Active',
+  status text NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Archived')),
   member_count integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz
@@ -117,7 +132,7 @@ CREATE TABLE IF NOT EXISTS activities (
   date_to date,
   location text,
   notes text,
-  status text NOT NULL DEFAULT 'active',
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
   archived_at timestamptz,
   archived_by uuid,
   created_by uuid,
@@ -129,7 +144,7 @@ CREATE TABLE IF NOT EXISTS activities (
 CREATE TABLE IF NOT EXISTS activity_participants (
   activity_id text NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
   member_id uuid NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-  status text,
+  status text DEFAULT 'attended' CHECK (status IN ('invited', 'attended', 'organizer')),
   note text,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (activity_id, member_id)
@@ -146,9 +161,9 @@ CREATE TABLE IF NOT EXISTS payments (
   member_id uuid NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   date date NOT NULL,
   year integer,
-  amount numeric(12, 2) NOT NULL,
+  amount numeric(10, 2) NOT NULL,
   method text,
-  status text,
+  status text DEFAULT 'Plătită',
   payment_type text,
   contribution_year integer,
   observations text,
@@ -166,10 +181,10 @@ CREATE INDEX IF NOT EXISTS payments_payment_code_idx ON payments (payment_code);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id text PRIMARY KEY, -- e.g. AUDIT-...
-  timestamp timestamptz NOT NULL,
+  timestamp timestamptz NOT NULL DEFAULT now(),
   actor_user_id text NOT NULL,
-  actor_name text,
-  actor_role text,
+  actor_name text NOT NULL,
+  actor_role text NOT NULL,
   action_type text NOT NULL,
   module text NOT NULL,
   entity_type text,

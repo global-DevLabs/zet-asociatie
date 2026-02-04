@@ -1,0 +1,13 @@
+-- Extracted from supabase_db.dump via: pg_restore -f - --schema-only --no-owner --no-privileges
+-- Use as reference for alignment with local migrations.
+
+-- public.members: last_name/first_name NOT NULL, cnp text, branch_enrollment_date date, branch_withdrawal_date date, years_of_service integer DEFAULT 0, has_current_workplace text, updated_at DEFAULT now()
+-- public.profiles: full_name NOT NULL, email NOT NULL, role NOT NULL, phone text, notes text, is_active boolean DEFAULT true, created_by uuid
+-- public.counters: entity_type text NOT NULL PK, current_value integer DEFAULT 0 NOT NULL, updated_at timestamptz DEFAULT now()
+-- public.payments: id uuid DEFAULT gen_random_uuid(), method NOT NULL, status DEFAULT 'Plătită', amount numeric(10,2)
+-- public.activity_types: id uuid DEFAULT gen_random_uuid()
+-- public.activities: type_id uuid NOT NULL, date_from NOT NULL, archived_by text
+-- public.activity_participants: member_id text in dump (we keep uuid for FK to members)
+-- public.um_units: id uuid DEFAULT gen_random_uuid()
+-- public.audit_logs: actor_name NOT NULL, actor_role NOT NULL, "timestamp" DEFAULT now()
+-- public.whatsapp_groups: no member_count in dump (we keep for app)
