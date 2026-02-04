@@ -64,3 +64,24 @@ npm run electron:build     # electron-builder for Windows x64
 
 Output: `dist-electron/` (e.g. NSIS installer).
 
+### Troubleshooting: "ffmpeg.dll was not found"
+
+This error means the app’s Electron runtime is missing `ffmpeg.dll` (used by Chromium for media). Even when the build is done **on Windows**, it can still happen. Try the following.
+
+- **1. Run the unpacked build first**  
+  Build without the installer to confirm the DLL is present:
+  ```bash
+  npm run build
+  npm run electron:pack
+  ```
+  Open `dist-electron\win-unpacked\`. Run `Zet Asociatie.exe` from that folder. Check whether `ffmpeg.dll` (or the whole Electron runtime) is next to the exe or under `resources\`. If it works here but not after NSIS install, the installer is likely stripping or moving files.
+
+- **2. Antivirus / Windows Defender**  
+  Some security software quarantines or deletes `ffmpeg.dll`. Add an exclusion for the app folder (e.g. `C:\Program Files\Zet Asociatie` or `dist-electron\win-unpacked`) or temporarily disable real-time protection, then rebuild/reinstall and run again.
+
+- **3. Run from the installed location**  
+  After installing via the NSIS installer, start the app from the Start Menu or from e.g. `C:\Program Files\Zet Asociatie\`. Do not copy only the `.exe` elsewhere; the `.exe` must stay with the rest of the files (DLLs, `resources\`).
+
+- **4. Reinstall**  
+  Uninstall completely, then run the installer again so all runtime files are written correctly.
+
