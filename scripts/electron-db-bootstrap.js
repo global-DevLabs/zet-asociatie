@@ -47,9 +47,20 @@ async function runBootstrap(options) {
 
   try {
     await client.query(`CREATE DATABASE ${dbName}`);
+  } catch (err) {
+    if (!err.message || !err.message.includes("already exists")) {
+      console.error("Create database failed:", err.message);
+      await client.end();
+      return null;
+    }
+    // Database already exists (e.g. from a previous run); continue to set password and config
+  }
+
+  try {
     await client.query("ALTER USER postgres WITH PASSWORD $1", [password]);
   } catch (err) {
-    console.error("Create database / alter user failed:", err.message);
+    console.error("ALTER USER postgres failed:", err.message);
+    await client.end();
     return null;
   } finally {
     await client.end();
