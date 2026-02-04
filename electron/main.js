@@ -1,36 +1,44 @@
 const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
 const { spawn } = require("node:child_process");
-
-/**
- * Minimal Electron main process.
- *
- * CURRENT STATUS:
- * - Opens the existing Next.js app in a desktop window.
- * - In production, starts the Next.js standalone server as a child process.
- * - Does NOT yet start Postgres (that will be added in a later step).
- * - Security-conscious defaults for the renderer are enabled.
- *
- * To use (after installing Electron locally):
- *   npm install --save-dev electron electron-builder
- *   npm run electron:dev
- */
+const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
 
 const NEXT_DEV_URL = process.env.NEXT_APP_URL || "http://localhost:3000";
 const NEXT_PROD_PORT = process.env.PORT || 3000;
-
-// Optional, configurable Postgres integration.
-// These should point to a pre-configured local PostgreSQL installation
-// when you are ready to enable embedded DB startup.
-const POSTGRES_BIN = process.env.POSTGRES_BIN; // e.g. C:\\path\\to\\postgres.exe
-const POSTGRES_DATA_DIR = process.env.POSTGRES_DATA_DIR; // e.g. C:\\path\\to\\data
-const POSTGRES_PORT = process.env.POSTGRES_PORT || 5432;
+const DEFAULT_PG_PORT = 5432;
 
 let nextServerProcess = null;
 let postgresProcess = null;
 
-const isDev =
-  process.env.NODE_ENV === "development" || !app.isPackaged;
+const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+
+/** Load config from app userData (set by first-run setup or manual). */
+function loadConfig() {
+  const configPath = getConfigPath(app);
+  if (!fs.existsSync(configPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function getPostgresConfig() {
+  const config = loadConfig();
+  if (config?.postgresBin && config?.postgresDataDir) {
+    return {
+      postgresBin: config.postgresBin,
+      postgresDataDir: config.postgresDataDir,
+      port: config.port || DEFAULT_PG_PORT,
+    };
+  }
+  return {
+    postgresBin: process.env.POSTGRES_BIN,
+    postgresDataDir: process.env.POSTGRES_DATA_DIR,
+    port: parseInt(process.env.POSTGRES_PORT || String(DEFAULT_PG_PORT), 10),
+  };
+}
 
 function createMainWindow() {
   const win = new BrowserWindow({
@@ -51,32 +59,20 @@ function createMainWindow() {
   win.loadURL(urlToLoad);
 }
 
-function startPostgresIfConfigured() {
-  // For now, only start Postgres if explicit paths are provided.
-  if (!POSTGRES_BIN || !POSTGRES_DATA_DIR) {
+function startPostgresIfConfigured(postgresBin, postgresDataDir, port) {
+  if (!postgresBin || !postgresDataDir) {
     console.log(
-      "[electron] POSTGRES_BIN or POSTGRES_DATA_DIR not set; skipping Postgres startup.",
+      "[electron] Postgres not configured; skipping startup (first-run setup may run next)."
     );
     return;
   }
 
-  if (postgresProcess) {
-    return;
-  }
+  if (postgresProcess) return;
 
   postgresProcess = spawn(
-    POSTGRES_BIN,
-    [
-      "-D",
-      POSTGRES_DATA_DIR,
-      "-p",
-      String(POSTGRES_PORT),
-      "-h",
-      "127.0.0.1",
-    ],
-    {
-      stdio: "inherit",
-    },
+    postgresBin,
+    ["-D", postgresDataDir, "-p", String(port), "-h", "127.0.0.1"],
+    { stdio: "pipe", env: { ...process.env, PGUSER: "postgres" } }
   );
 
   postgresProcess.on("exit", (code) => {
@@ -104,18 +100,21 @@ function startNextStandaloneServer() {
   const standaloneDir = path.join(process.cwd(), ".next", "standalone");
   const serverEntry = path.join(standaloneDir, "server.js");
 
-  nextServerProcess = spawn(
-    process.execPath,
-    [serverEntry],
-    {
-      cwd: standaloneDir,
-      env: {
-        ...process.env,
-        PORT: String(NEXT_PROD_PORT),
-      },
-      stdio: "inherit",
-    },
-  );
+  const config = loadConfig();
+  const env = {
+    ...process.env,
+    PORT: String(NEXT_PROD_PORT),
+    USE_LOCAL_DB: "true",
+    LOCAL_DB_URL: config?.localDbUrl || process.env.LOCAL_DB_URL,
+    JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET,
+    ENCRYPTION_SALT: config?.encryptionSalt || process.env.ENCRYPTION_SALT,
+  };
+
+  nextServerProcess = spawn(process.execPath, [serverEntry], {
+    cwd: standaloneDir,
+    env,
+    stdio: "inherit",
+  });
 
   nextServerProcess.on("exit", (code) => {
     nextServerProcess = null;
@@ -133,10 +132,21 @@ function stopNextStandaloneServer() {
   }
 }
 
-app.whenReady().then(() => {
-  // In production, this is where we will have the full
-  // "start Postgres + API on app launch" chain.
-  startPostgresIfConfigured();
+app.whenReady().then(async () => {
+  if (!isDev && app.isPackaged) {
+    const config = await ensurePostgresSetup(app);
+    if (config) {
+      process.env.LOCAL_DB_URL = config.localDbUrl;
+      process.env.JWT_SECRET = config.jwtSecret;
+      process.env.ENCRYPTION_SALT = config.encryptionSalt;
+      const pg = getPostgresConfig();
+      startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
+    }
+  } else {
+    const pg = getPostgresConfig();
+    startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
+  }
+
   startNextStandaloneServer();
   createMainWindow();
 

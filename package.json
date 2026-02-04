@@ -94,7 +94,17 @@
       "electron/**/*",
       ".next/**/*",
       "public/**/*",
-      "package.json"
+      "package.json",
+      "scripts/**/*",
+      "db/**/*",
+      "node_modules/pg/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/postgres-win",
+        "to": "postgres-win",
+        "filter": ["**/*"]
+      }
     ],
     "extraMetadata": {
       "main": "electron/main.js"
