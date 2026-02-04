@@ -12,6 +12,7 @@
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn, spawnSync } = require("node:child_process");
+const debugLog = require("./debug-log");
 const DB_NAME = "zet_asociatie";
 const PG_PORT = 5432;
 
@@ -41,9 +42,10 @@ function getBundledPostgresBinDir() {
 }
 
 /**
- * Wait for Postgres to accept TCP connections (no pg dependency in main process).
+ * Wait for Postgres to accept TCP connections and finish "starting up" (no pg dependency in main process).
+ * Uses more attempts and longer delay so "database system is starting up" does not run bootstrap too early.
  */
-function waitForPostgresTcp(port, maxAttempts = 30) {
+function waitForPostgresTcp(port, maxAttempts = 60) {
   const net = require("node:net");
   return new Promise((resolve) => {
     let attempts = 0;
@@ -55,7 +57,7 @@ function waitForPostgresTcp(port, maxAttempts = 30) {
       socket.on("error", () => {
         attempts++;
         if (attempts >= maxAttempts) resolve(false);
-        else setTimeout(tryConnect, 500);
+        else setTimeout(tryConnect, 800);
       });
     }
     tryConnect();
@@ -96,10 +98,7 @@ async function ensurePostgresSetup(app) {
 
   const binDir = getBundledPostgresBinDir();
   if (!binDir) {
-    console.warn(
-      "[postgres-setup] Bundled Postgres not found at resources/postgres-win. " +
-        "Set POSTGRES_BIN and POSTGRES_DATA_DIR in config or env for manual setup."
-    );
+    debugLog.log("INFO", "[postgres-setup] Bundled Postgres not found at resources/postgres-win. Set POSTGRES_BIN and POSTGRES_DATA_DIR for manual setup.");
     return null;
   }
 
@@ -107,7 +106,7 @@ async function ensurePostgresSetup(app) {
   const postgresPath = path.join(binDir, "postgres.exe");
 
   if (!fs.existsSync(initdbPath) || !fs.existsSync(postgresPath)) {
-    console.warn("[postgres-setup] initdb or postgres executable not found in", binDir);
+    debugLog.error(`[postgres-setup] initdb or postgres not found in ${binDir}`);
     return null;
   }
 
@@ -116,18 +115,18 @@ async function ensurePostgresSetup(app) {
   }
 
   if (!fs.existsSync(dataDir)) {
-    console.log("[postgres-setup] Running initdb...");
+    debugLog.info("[postgres-setup] Running initdb...");
     const initResult = spawnSync(initdbPath, ["-D", dataDir, "-U", "postgres", "--encoding=UTF8"], {
       stdio: "inherit",
       env: { ...process.env, PGUSER: "postgres" },
     });
     if (initResult.status !== 0) {
-      console.error("[postgres-setup] initdb failed");
+      debugLog.error("[postgres-setup] initdb failed");
       return null;
     }
   }
 
-  console.log("[postgres-setup] Starting Postgres for first-run setup...");
+  debugLog.info("[postgres-setup] Starting Postgres for first-run setup...");
   const postgresProcess = spawn(
     postgresPath,
     ["-D", dataDir, "-p", String(PG_PORT), "-h", "127.0.0.1"],
@@ -137,16 +136,20 @@ async function ensurePostgresSetup(app) {
   const ready = await waitForPostgresTcp(PG_PORT);
   if (!ready) {
     postgresProcess.kill();
-    console.error("[postgres-setup] Postgres did not become ready");
+    debugLog.error("[postgres-setup] Postgres did not become ready");
     return null;
   }
 
+  // Give Postgres a moment to finish "starting up" before running bootstrap (avoids "database system is starting up")
+  await new Promise((r) => setTimeout(r, 3000));
+
   const appRoot = app.getAppPath ? app.getAppPath() : process.cwd();
+  debugLog.info(`[postgres-setup] appRoot=${appRoot} loading bootstrap...`);
   let runBootstrap;
   try {
     runBootstrap = require(path.join(appRoot, "scripts", "electron-db-bootstrap.js")).runBootstrap;
   } catch (err) {
-    console.error("[postgres-setup] Could not load bootstrap:", err.message);
+    debugLog.error(`[postgres-setup] Could not load bootstrap: ${err.message}`);
     postgresProcess.kill();
     return null;
   }
@@ -161,7 +164,7 @@ async function ensurePostgresSetup(app) {
   postgresProcess.kill();
 
   if (!bootstrapResult) {
-    console.error("[postgres-setup] Bootstrap failed");
+    debugLog.error("[postgres-setup] Bootstrap failed");
     return null;
   }
 
@@ -179,7 +182,7 @@ async function ensurePostgresSetup(app) {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
   }
 
-  console.log("[postgres-setup] First-run setup complete. Config at", configPath);
+  debugLog.info(`[postgres-setup] First-run setup complete. Config at ${configPath}`);
   return config;
 }
 

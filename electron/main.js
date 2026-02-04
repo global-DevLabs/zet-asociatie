@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
+const debugLog = require("./debug-log");
 
 const NEXT_DEV_URL = process.env.NEXT_APP_URL || "http://localhost:3000";
 const NEXT_PROD_PORT = process.env.PORT || 3000;
@@ -12,6 +13,19 @@ let nextServerProcess = null;
 let postgresProcess = null;
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+
+// Global error handlers – log to file so we capture crashes (e.g. on Windows)
+process.on("uncaughtException", (err) => {
+  try {
+    debugLog.error(`uncaughtException: ${err.stack || err.message}`);
+  } catch (_) {}
+  throw err;
+});
+process.on("unhandledRejection", (reason, promise) => {
+  try {
+    debugLog.error(`unhandledRejection: ${reason}`);
+  } catch (_) {}
+});
 
 /** Load config from app userData (set by first-run setup or manual). */
 function loadConfig() {
@@ -77,7 +91,10 @@ function startPostgresIfConfigured(postgresBin, postgresDataDir, port) {
 
   postgresProcess.on("exit", (code) => {
     postgresProcess = null;
-    console.log("[electron] Postgres exited with code:", code);
+    debugLog.info(`Postgres exited with code: ${code}`);
+  });
+  postgresProcess.on("error", (err) => {
+    debugLog.error(`Postgres spawn error: ${err.message}`);
   });
 }
 
@@ -107,11 +124,15 @@ function startNextStandaloneServer() {
   const serverEntry = path.join(standaloneDir, "server.js");
 
   if (!fs.existsSync(serverEntry)) {
-    console.error("[electron] Next server not found:", serverEntry);
+    debugLog.error(`Next server not found: ${serverEntry}`);
+    debugLog.info(`appRoot=${appRoot} standaloneDir=${standaloneDir}`);
     return;
   }
+  debugLog.info(`Starting Next server: cwd=${standaloneDir} execPath=${process.execPath}`);
 
   const config = loadConfig();
+  // NODE_PATH so standalone server.js can resolve 'next' (packaged app may not have .next/standalone/node_modules fully unpacked)
+  const nodePath = path.join(appRoot, "node_modules");
   const env = {
     ...process.env,
     PORT: String(NEXT_PROD_PORT),
@@ -119,8 +140,8 @@ function startNextStandaloneServer() {
     LOCAL_DB_URL: config?.localDbUrl || process.env.LOCAL_DB_URL,
     JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET,
     ENCRYPTION_SALT: config?.encryptionSalt || process.env.ENCRYPTION_SALT,
-    // Run Electron executable as Node so server.js runs correctly on macOS/Windows.
     ELECTRON_RUN_AS_NODE: "1",
+    NODE_PATH: process.env.NODE_PATH ? `${nodePath}${path.delimiter}${process.env.NODE_PATH}` : nodePath,
   };
 
   nextServerProcess = spawn(process.execPath, [serverEntry], {
@@ -130,11 +151,12 @@ function startNextStandaloneServer() {
   });
 
   nextServerProcess.on("error", (err) => {
-    console.error("[electron] Failed to start Next server:", err);
+    debugLog.error(`Failed to start Next server: ${err.message} (${err.code || ""})`);
     nextServerProcess = null;
   });
 
-  nextServerProcess.on("exit", (code) => {
+  nextServerProcess.on("exit", (code, signal) => {
+    debugLog.info(`Next server exited code=${code} signal=${signal}`);
     nextServerProcess = null;
     if (!isDev && code !== 0 && code !== null) {
       app.quit();
@@ -150,22 +172,35 @@ function stopNextStandaloneServer() {
 }
 
 app.whenReady().then(async () => {
-  if (!isDev && app.isPackaged) {
-    const config = await ensurePostgresSetup(app);
-    if (config) {
-      process.env.LOCAL_DB_URL = config.localDbUrl;
-      process.env.JWT_SECRET = config.jwtSecret;
-      process.env.ENCRYPTION_SALT = config.encryptionSalt;
+  debugLog.init(app);
+  debugLog.info(`App ready. isPackaged=${app.isPackaged} isDev=${isDev}`);
+
+  try {
+    if (!isDev && app.isPackaged) {
+      debugLog.info("Running first-run / Postgres setup...");
+      const config = await ensurePostgresSetup(app);
+      if (config) {
+        process.env.LOCAL_DB_URL = config.localDbUrl;
+        process.env.JWT_SECRET = config.jwtSecret;
+        process.env.ENCRYPTION_SALT = config.encryptionSalt;
+        const pg = getPostgresConfig();
+        startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
+      } else {
+        debugLog.info("No Postgres config (first-run or skipped).");
+      }
+    } else {
       const pg = getPostgresConfig();
       startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
     }
-  } else {
-    const pg = getPostgresConfig();
-    startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
-  }
 
-  startNextStandaloneServer();
-  createMainWindow();
+    startNextStandaloneServer();
+    debugLog.info("Creating main window...");
+    createMainWindow();
+    debugLog.info("Main window created.");
+  } catch (err) {
+    debugLog.error(`Startup error: ${err.stack || err.message}`);
+    throw err;
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

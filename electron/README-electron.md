@@ -29,6 +29,16 @@ Do this **on a Windows machine** to produce a Windows installer (standalone app)
 
 On first launch, if Postgres was bundled, the app will set up the DB and config under `%APPDATA%\Zet Asociatie\`; otherwise configure an existing Postgres or env.
 
+### Debug log (app opens then closes)
+
+If the app starts and then closes immediately, a **debug log** is written to a text file so you can see the error:
+
+- **Windows:** `%APPDATA%\Zet Asociatie\debug.log`  
+  (e.g. `C:\Users\<You>\AppData\Roaming\Zet Asociatie\debug.log`)
+- **macOS:** `~/Library/Application Support/Zet Asociatie/debug.log`
+
+Open the file in Notepad (or any text editor). The first line shows the log file path; the rest are timestamped entries (startup, Postgres setup, Next server, and any **ERROR** or **uncaughtException** / **unhandledRejection**). Use the last lines to see why the app exited.
+
 ### First-run Postgres install (packaged app)
 
 When the app is built **with** PostgreSQL binaries bundled:
