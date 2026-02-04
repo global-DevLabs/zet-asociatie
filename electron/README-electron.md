@@ -57,12 +57,25 @@ Postgres is not started by Electron in dev unless you set `POSTGRES_BIN` and `PO
 
 ### Building the Windows installer
 
+Do this **on a Windows machine** (see “Build standalone on Windows” above):
+
 ```bash
 npm run build              # Next.js standalone build
 npm run electron:build     # electron-builder for Windows x64
 ```
 
 Output: `dist-electron/` (e.g. NSIS installer).
+
+### Building for macOS
+
+Do this **on a Mac**. electron-builder cannot produce valid macOS apps when run on Windows.
+
+```bash
+npm run build
+npm run electron:build     # or: npx electron-builder --mac
+```
+
+Output: `dist-electron/` (e.g. `.dmg` or `.app`). Postgres bundling in this repo is set up for Windows; on Mac you’ll use a system or Homebrew Postgres or env config.
 
 ### Troubleshooting: "ffmpeg.dll was not found"
 
@@ -84,4 +97,21 @@ This error means the app’s Electron runtime is missing `ffmpeg.dll` (used by C
 
 - **4. Reinstall**  
   Uninstall completely, then run the installer again so all runtime files are written correctly.
+
+### Troubleshooting: "Invalid file descriptor to ICU data received" (icu_util.cc)
+
+This error means Chromium’s ICU data (e.g. `icudtl.dat`) is missing or not loadable. It often appears when **both** Windows and Mac builds fail.
+
+- **Build each platform on its own OS.**  
+  - **Windows build** → run `npm run build` and `npm run electron:build` on a **Windows** machine.  
+  - **Mac build** → run the same on a **Mac**.  
+  Building Windows on Mac (or Mac on Windows) can produce installers that lack the correct ICU/runtime files, so the app crashes with this error on launch.
+
+- **Don’t run the wrong executable.**  
+  Use the Windows build (e.g. `Zet Asociatie Setup x.x.x.exe` or `win-unpacked\Zet Asociatie.exe`) only on Windows. Use the Mac build (`.app` or `.dmg`) only on macOS.
+
+- **Clean rebuild.**  
+  Delete `dist-electron/` and `node_modules`, run `npm install` and `npm run build`, then `npm run electron:build` again on the **target** OS.
+
+If you need both Windows and Mac installers, build once on a Windows PC and once on a Mac (or use CI: e.g. GitHub Actions with a Windows runner and a macOS runner).
 
