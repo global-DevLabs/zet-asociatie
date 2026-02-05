@@ -25,6 +25,7 @@ Do this **on a Windows machine** to produce a Windows installer (standalone app)
    ```bash
    npm run electron:build
    ```
+   This runs `version:bump` first (increments the patch version in `package.json`, e.g. 0.1.1 → 0.1.2), then builds the installer.
 6. **Output:** `dist-electron/` — e.g. NSIS installer (`.exe`) for Windows x64. Run it on the target PC to install the standalone app.
 
 On first launch, if Postgres was bundled, the app will set up the DB and config under `%APPDATA%\Zet Asociatie\`; otherwise configure an existing Postgres or env.
@@ -129,6 +130,27 @@ This error means the app’s Electron runtime is missing `ffmpeg.dll` (used by C
 
 - **4. Reinstall**  
   Uninstall completely, then run the installer again so all runtime files are written correctly.
+
+### Troubleshooting: "NSIS Error" / Cannot uninstall previous version
+
+The Windows build uses an **assisted installer** (`oneClick: false`) so the uninstaller is created and registered in a standard way; this reduces "Installer integrity check has failed" issues. If you still see that error (e.g. from an older one-click build), remove the app manually:
+
+1. **Close the app** if it is running (Task Manager → end "Zet Asociatie" if needed).
+
+2. **Delete the install folder**  
+   - Open File Explorer and go to `C:\Program Files\` (or `C:\Program Files (x86)\` if you used a 32‑bit install).  
+   - Delete the folder **Zet Asociatie** (right‑click → Delete; use "Continue" if Windows asks for admin rights).
+
+3. **Remove the uninstaller entry** (optional)  
+   - Settings → Apps → Installed apps → find "Zet Asociatie" → Uninstall. If it fails again, ignore it; the app files are already gone.  
+   - Or run `appwiz.cpl`, find "Zet Asociatie", select it, click Uninstall. If you get the same NSIS error, the entry may remain until you remove it via a registry fix or leave it; it will point to a missing path after you deleted the folder.
+
+4. **App data (optional)**  
+   - To remove saved data and config (database, config.json): open Run (Win+R), type `%APPDATA%`, press Enter, then delete the folder **Zet Asociatie** if you want a full clean slate.  
+   - If you keep this folder, a new install will reuse the existing config and database.
+
+5. **Reinstall**  
+   - Run the new installer (e.g. `Zet Asociatie Setup 0.1.1.exe`) to install again.
 
 ### Troubleshooting: "Invalid file descriptor to ICU data received" (icu_util.cc)
 

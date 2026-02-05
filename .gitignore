@@ -8,7 +8,9 @@
 /out/
 
 # production
-/build
+# Next.js build output (if any)
+/build/*
+!/build/icon.png
 /dist-electron
 
 # debug

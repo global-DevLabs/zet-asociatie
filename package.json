@@ -1,6 +1,8 @@
 {
   "name": "zet_asociatie",
   "version": "0.1.1",
+  "description": "Aplicatie de administrare membri",
+  "author": "Zet Securty",
   "private": true,
   "scripts": {
     "build": "next build --webpack && node scripts/copy-standalone-static.js",
@@ -9,8 +11,9 @@
     "start": "next start",
     "migrate:local": "node scripts/migrate.js",
     "electron:dev": "electron ./electron/main.js",
-    "electron:build": "electron-builder -w",
-    "electron:build:mac": "electron-builder --mac",
+    "version:bump": "npm version patch --no-git-tag-version",
+    "electron:build": "npm run version:bump && electron-builder -w",
+    "electron:build:mac": "npm run version:bump && electron-builder --mac",
     "electron:pack": "electron-builder --dir -w",
     "electron:pack:mac": "electron-builder --dir --mac"
   },
@@ -132,16 +135,26 @@
     "extraMetadata": {
       "main": "electron/main.js"
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": ["en_US"],
+      "deleteAppDataOnUninstall": false
+    },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.png"
     },
     "mac": {
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.business"
+      "category": "public.app-category.business",
+      "icon": "build/icon.png"
     }
   }
 }

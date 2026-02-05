@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AlertCircle, CheckCircle2, Settings, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, RefreshCw, Settings, XCircle } from "lucide-react";
 
 type HealthService = {
   id: string;
@@ -61,47 +61,58 @@ function SetupForm() {
     };
   }, [router]);
 
-  // Fetch service status for the status section
-  useEffect(() => {
-    let mounted = true;
-    async function fetchHealth() {
+  const fetchHealth = useCallback(async () => {
+    setHealthLoading(true);
+    try {
+      const res = await fetch("/api/health", { credentials: "include" });
+      const text = await res.text();
+      let data: { services?: HealthService[] } = {};
       try {
-        const res = await fetch("/api/health", { credentials: "include" });
-        const text = await res.text();
-        let data: { services?: HealthService[] } = {};
-        try {
-          data = text ? JSON.parse(text) : {};
-        } catch {
-          setServices([
-            {
-              id: "api",
-              name: "Server API",
-              ok: false,
-              message: "Răspuns invalid de la server.",
-            },
-          ]);
-          return;
-        }
-        if (mounted && Array.isArray(data.services)) {
-          setServices(data.services);
-        }
+        data = text ? JSON.parse(text) : {};
       } catch {
-        if (mounted) {
-          setServices([
-            {
-              id: "api",
-              name: "Server API",
-              ok: false,
-              message: "Nu s-a putut contacta serverul.",
-            },
-          ]);
-        }
-      } finally {
-        if (mounted) setHealthLoading(false);
+        setServices([
+          {
+            id: "config",
+            name: "Configurare aplicație",
+            ok: false,
+            message: "Nu s-a putut citi răspunsul.",
+          },
+          {
+            id: "database",
+            name: "Bază de date (PostgreSQL)",
+            ok: false,
+            message: "—",
+          },
+          {
+            id: "api",
+            name: "Server API",
+            ok: false,
+            message:
+              "Răspuns invalid. Reporniți aplicația; dacă problema persistă, verificați debug.log.",
+          },
+        ]);
+        return;
       }
+      if (Array.isArray(data.services)) {
+        setServices(data.services);
+      }
+    } catch {
+      setServices([
+        {
+          id: "api",
+          name: "Server API",
+          ok: false,
+          message: "Nu s-a putut contacta serverul. Reporniți aplicația.",
+        },
+      ]);
+    } finally {
+      setHealthLoading(false);
     }
-    fetchHealth();
   }, []);
+
+  useEffect(() => {
+    fetchHealth();
+  }, [fetchHealth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,32 +178,90 @@ function SetupForm() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Service status */}
-          <div className="rounded-lg border bg-muted/40 p-3">
-            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Status servicii
-            </h3>
+          <div className="rounded-lg border bg-muted/40 p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Servicii și dependențe
+              </h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={() => fetchHealth()}
+                disabled={healthLoading}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1 ${healthLoading ? "animate-spin" : ""}`} />
+                Reîmprospătează
+              </Button>
+            </div>
             {healthLoading ? (
-              <p className="text-xs text-muted-foreground">Se verifică...</p>
+              <p className="text-sm text-muted-foreground py-2">Se verifică serviciile...</p>
             ) : (
-              <ul className="space-y-1.5">
-                {services.map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex items-start gap-2 text-sm"
+              <>
+                {/* Overall status */}
+                {services.length > 0 && (
+                  <div
+                    className={`mb-3 px-3 py-2 rounded-md text-sm font-medium ${
+                      services.every((s) => s.ok)
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
+                        : "bg-destructive/10 text-destructive"
+                    }`}
                   >
-                    {s.ok ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                    )}
-                    <span className={s.ok ? "text-foreground" : "text-destructive"}>
-                      <span className="font-medium">{s.name}:</span>{" "}
-                      {s.message}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    {services.every((s) => s.ok)
+                      ? "Toate serviciile sunt gata. Puteți crea contul de administrator."
+                      : `${services.filter((s) => !s.ok).length} problemă(e) detectate. Verificați detaliile mai jos.`}
+                  </div>
+                )}
+                {/* Per-service list */}
+                <ul className="space-y-3">
+                  {services.map((s) => (
+                    <li
+                      key={s.id}
+                      className={`rounded-md border p-2.5 ${
+                        s.ok
+                          ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-900/10"
+                          : "border-destructive/30 bg-destructive/5 dark:border-destructive/50 dark:bg-destructive/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          {s.name}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
+                            s.ok
+                              ? "bg-green-600 text-white dark:bg-green-700"
+                              : "bg-destructive text-destructive-foreground"
+                          }`}
+                        >
+                          {s.ok ? (
+                            <>
+                              <CheckCircle2 className="h-3 w-3" />
+                              Gata
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3" />
+                              Problemă
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <p
+                        className={`mt-1 text-xs ${
+                          s.ok
+                            ? "text-muted-foreground"
+                            : "text-destructive font-medium"
+                        }`}
+                      >
+                        {s.message}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
 

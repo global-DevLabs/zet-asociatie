@@ -23,7 +23,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Registru Membri Asociație",
-  description: "Aplicație internă pentru gestionarea membrilor",
+  description: "Aplicatie de administrare membri",
   generator: "v0.app",
 };
 
