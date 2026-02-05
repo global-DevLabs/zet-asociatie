@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -7,10 +7,10 @@ const { spawn } = require("node:child_process");
 const debugLog = require("./debug-log");
 
 // Create debug.log as early as possible (before app.whenReady), so crashes are logged.
-// Uses %APPDATA%\Zet Asociatie\ on Windows when app is not yet ready.
+// Uses %APPDATA%\Admin Membri\ on Windows when app is not yet ready.
 debugLog.init(null);
 
-const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
+const { ensurePostgresSetup, getConfigPath, loadExistingConfig, getLastSetupFailure, startPostgresViaTaskIfNeeded, killPostgresOnPort } = require("./postgres-setup");
 
 const NEXT_DEV_URL = process.env.NEXT_APP_URL || "http://localhost:3000";
 /** Packaged app: set in whenReady after finding a free port to avoid EADDRINUSE. */
@@ -25,6 +25,9 @@ const LOGIN_PATH = "/login";
 
 let nextServerProcess = null;
 let postgresProcess = null;
+/** When true, Postgres was started via scheduled task (admin account); stop via killPostgresOnPort(port). */
+let postgresStartedViaTask = false;
+let postgresPort = DEFAULT_PG_PORT;
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 
@@ -59,12 +62,14 @@ function getPostgresConfig() {
       postgresBin: config.postgresBin,
       postgresDataDir: config.postgresDataDir,
       port: config.port || DEFAULT_PG_PORT,
+      startPostgresViaTask: !!config.startPostgresViaTask,
     };
   }
   return {
     postgresBin: process.env.POSTGRES_BIN,
     postgresDataDir: process.env.POSTGRES_DATA_DIR,
     port: parseInt(process.env.POSTGRES_PORT || String(DEFAULT_PG_PORT), 10),
+    startPostgresViaTask: false,
   };
 }
 
@@ -131,7 +136,7 @@ function waitForServerReady() {
   });
 }
 
-function startPostgresIfConfigured(postgresBin, postgresDataDir, port) {
+async function startPostgresIfConfigured(postgresBin, postgresDataDir, port, startViaTask = false) {
   if (!postgresBin || !postgresDataDir) {
     console.log(
       "[electron] Postgres not configured; skipping startup (first-run setup may run next)."
@@ -139,12 +144,24 @@ function startPostgresIfConfigured(postgresBin, postgresDataDir, port) {
     return;
   }
 
-  if (postgresProcess) return;
+  if (postgresProcess || (startViaTask && postgresStartedViaTask)) return;
+
+  if (startViaTask && process.platform === "win32") {
+    postgresPort = port;
+    const ready = await startPostgresViaTaskIfNeeded(postgresBin, postgresDataDir, port);
+    if (ready) {
+      postgresStartedViaTask = true;
+      debugLog.info("[MAIN] Postgres started via scheduled task (least privileges).");
+    } else {
+      debugLog.error("[MAIN] Failed to start Postgres via task.");
+    }
+    return;
+  }
 
   postgresProcess = spawn(
     postgresBin,
     ["-D", postgresDataDir, "-p", String(port), "-h", "127.0.0.1"],
-    { stdio: "pipe", env: { ...process.env, PGUSER: "postgres" } }
+    { stdio: "pipe", env: { ...process.env, PGUSER: "postgres" }, cwd: path.dirname(postgresBin) }
   );
 
   postgresProcess.on("exit", (code) => {
@@ -157,6 +174,10 @@ function startPostgresIfConfigured(postgresBin, postgresDataDir, port) {
 }
 
 function stopPostgresIfRunning() {
+  if (postgresStartedViaTask) {
+    killPostgresOnPort(postgresPort);
+    postgresStartedViaTask = false;
+  }
   if (postgresProcess) {
     postgresProcess.kill();
     postgresProcess = null;
@@ -259,15 +280,26 @@ app.whenReady().then(async () => {
         process.env.ENCRYPTION_SALT = config.encryptionSalt;
         const pg = getPostgresConfig();
         debugLog.verbose("[MAIN] Step: Starting Postgres server...");
-        startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
+        await startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port, pg.startPostgresViaTask);
       } else {
         debugLog.info("[MAIN] Setup: Postgres setup — skipped or failed (no config).");
+        if (getLastSetupFailure() === "admin_refused") {
+          await dialog.showMessageBox({
+            type: "error",
+            title: "Database setup failed",
+            message: "PostgreSQL cannot run as Administrator",
+            detail:
+              "The bundled database refuses to run when the app is started with administrative permissions.\n\n" +
+              "• Do not right-click the app and choose \"Run as administrator\".\n" +
+              "• If you are logged in as the built-in Administrator account, create a standard user account and run Admin Membri from there, or install PostgreSQL separately and set LOCAL_DB_URL in the app config.",
+          });
+        }
       }
       debugLog.info("[MAIN] ========== Setup: Complete ==========");
     } else {
       debugLog.verbose("[MAIN] Setup: Skipped (dev or unpackaged). Using existing config or env.");
       const pg = getPostgresConfig();
-      startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
+      await startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port, pg.startPostgresViaTask);
     }
 
     if (!isDev) {

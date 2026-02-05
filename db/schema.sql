@@ -1,8 +1,9 @@
 -- Local PostgreSQL schema (inferred from the current Supabase usage).
+-- Target: PostgreSQL 17. Compatible with migrations in db/migrations/.
 --
 -- IMPORTANT:
--- - This schema is derived from how the app uses Supabase tables today.
--- - It is designed to be compatible with a fresh local Postgres instance.
+-- - This file represents the full schema after all migrations (0001–0005).
+-- - For a fresh DB, run migrations; do not apply this file directly (it overlaps 0001 + 0003 for profiles).
 -- - If your actual Supabase schema differs, adjust as needed.
 
 -- Extensions

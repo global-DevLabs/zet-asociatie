@@ -34,33 +34,39 @@ function escapeSqlLiteral(str) {
  *
  * @param {import('pg').Client} client - Connected as postgres (to 'postgres' DB)
  * @param {{ port: string, dbName: string, log: (s: string) => void, logVerbose: (s: string) => void, logError: (s: string) => void }} opts
- * @returns {{ appUrl: string, appPassword: string } | null}
+ * @returns {Promise<{ appUrl: string, appPassword: string } | null>}
  */
-function setupRoleAndDatabase(client, opts) {
+async function setupRoleAndDatabase(client, opts) {
   const { port, dbName, log, logVerbose, logError } = opts;
   const appPassword = generateSecret(24);
 
-  // 1) Create role zet_app (idempotent: fail if exists and we can't know password)
+  // 1) Create role zet_app, or recover if it already exists (e.g. config was lost)
   log("Bootstrap: Creating role " + APP_ROLE + " (LOGIN, NOSUPERUSER, NOCREATEDB, NOCREATEROLE)...");
   const passwordEscaped = escapeSqlLiteral(appPassword);
   try {
-    client.query(
+    await client.query(
       `CREATE ROLE ${APP_ROLE} WITH LOGIN PASSWORD '${passwordEscaped}' NOSUPERUSER NOCREATEDB NOCREATEROLE`
     );
     log("Bootstrap: Role " + APP_ROLE + " created.");
   } catch (err) {
-    if (err.message && err.code === "42710") {
-      logError("Bootstrap: Role " + APP_ROLE + " already exists. Restore config or drop the role to re-bootstrap.");
+    if (err.code === "42710") {
+      log("Bootstrap: Role " + APP_ROLE + " already exists; resetting password and continuing (recovery).");
+      try {
+        await client.query(`ALTER ROLE ${APP_ROLE} WITH PASSWORD '${passwordEscaped}'`);
+      } catch (alterErr) {
+        logError("Bootstrap: ALTER ROLE " + APP_ROLE + " — FAILED: " + (alterErr && alterErr.message));
+        return null;
+      }
+    } else {
+      logError("Bootstrap: Create role — FAILED: " + (err && err.message));
       return null;
     }
-    logError("Bootstrap: Create role — FAILED: " + (err && err.message));
-    return null;
   }
 
-  // 2) Create database owned by zet_app
+  // 2) Create database owned by zet_app (or ensure it exists on recovery)
   log("Bootstrap: Creating database " + dbName + " (owner " + APP_ROLE + ")...");
   try {
-    client.query(`CREATE DATABASE ${dbName} OWNER ${APP_ROLE}`);
+    await client.query(`CREATE DATABASE ${dbName} OWNER ${APP_ROLE}`);
     log("Bootstrap: Database created.");
   } catch (err) {
     if (err.message && err.message.includes("already exists")) {
@@ -133,7 +139,10 @@ async function runBootstrap(options) {
   const noPasswordUrl = `postgres://postgres@127.0.0.1:${port}/postgres`;
 
   const { Client } = require("pg");
-  const client = new Client({ connectionString: noPasswordUrl });
+  const client = new Client({
+    connectionString: noPasswordUrl,
+    password: "",
+  });
   try {
     await client.connect();
   } catch (err) {
@@ -142,17 +151,20 @@ async function runBootstrap(options) {
   }
   log("Bootstrap: Connected as postgres (no password).");
 
-  const result = setupRoleAndDatabase(client, { port, dbName, log, logVerbose, logError });
+  const result = await setupRoleAndDatabase(client, { port, dbName, log, logVerbose, logError });
   if (!result) {
-    await client.end();
+    try { await client.end(); } catch (_) {}
     return null;
   }
   const { appUrl } = result;
-  await client.end();
+  try { await client.end(); } catch (_) {}
 
   // Connect to app DB as postgres to grant privileges and create extension
   const adminAppDbUrl = `postgres://postgres@127.0.0.1:${port}/${dbName}`;
-  const clientAppDb = new Client({ connectionString: adminAppDbUrl });
+  const clientAppDb = new Client({
+    connectionString: adminAppDbUrl,
+    password: "",
+  });
   try {
     await clientAppDb.connect();
   } catch (err) {
@@ -183,8 +195,27 @@ async function runBootstrap(options) {
     encryptionSalt,
   };
 
+  const configDir = path.dirname(configPath);
+  if (!fs.existsSync(configDir)) {
+    try {
+      fs.mkdirSync(configDir, { recursive: true });
+      log("Bootstrap: Created config directory: " + configDir);
+    } catch (mkdirErr) {
+      logError("Bootstrap: Failed to create config directory — " + (mkdirErr && mkdirErr.message));
+      return null;
+    }
+  }
   log("Bootstrap: Writing config to " + configPath + "...");
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  } catch (writeErr) {
+    logError("Bootstrap: Failed to write config — " + (writeErr && writeErr.message));
+    return null;
+  }
+  if (!fs.existsSync(configPath)) {
+    logError("Bootstrap: Config file not found after write (path: " + configPath + ").");
+    return null;
+  }
   log("Bootstrap: Config written — success.");
 
   const migrateScript = path.join(appRoot, "scripts", "migrate.js");
@@ -263,13 +294,13 @@ async function runExternalBootstrap(options) {
   }
   log("Bootstrap (external): Connected as postgres.");
 
-  const result = setupRoleAndDatabase(client, { port, dbName, log, logVerbose, logError });
+  const result = await setupRoleAndDatabase(client, { port, dbName, log, logVerbose, logError });
   if (!result) {
-    await client.end();
+    try { await client.end(); } catch (_) {}
     return null;
   }
   const { appUrl } = result;
-  await client.end();
+  try { await client.end(); } catch (_) {}
 
   const adminAppDbUrl = defaultDbUrl.replace(/\/postgres$/, "/" + dbName);
   const clientAppDb = new Client({ connectionString: adminAppDbUrl });
@@ -301,8 +332,27 @@ async function runExternalBootstrap(options) {
     encryptionSalt,
   };
 
+  const configDir = path.dirname(configPath);
+  if (!fs.existsSync(configDir)) {
+    try {
+      fs.mkdirSync(configDir, { recursive: true });
+      log("Bootstrap (external): Created config directory: " + configDir);
+    } catch (mkdirErr) {
+      logError("Bootstrap (external): Failed to create config directory — " + (mkdirErr && mkdirErr.message));
+      return null;
+    }
+  }
   log("Bootstrap (external): Writing config to " + configPath + "...");
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  } catch (writeErr) {
+    logError("Bootstrap (external): Failed to write config — " + (writeErr && writeErr.message));
+    return null;
+  }
+  if (!fs.existsSync(configPath)) {
+    logError("Bootstrap (external): Config file not found after write (path: " + configPath + ").");
+    return null;
+  }
   log("Bootstrap (external): Config written — success.");
 
   const migrateScript = path.join(appRoot, "scripts", "migrate.js");

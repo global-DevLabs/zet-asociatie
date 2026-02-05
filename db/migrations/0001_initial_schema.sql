@@ -1,7 +1,7 @@
--- Initial schema migration.
---
--- This mirrors the structure defined in db/schema.sql and is
--- inferred from the current Supabase usage in the application.
+-- Initial schema migration (PostgreSQL 17).
+-- Profiles.password_hash is added in 0003_profiles_password.sql.
+-- updated_at triggers are added in 0005_updated_at_triggers.sql.
+-- See db/schema.sql for the full target schema.
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

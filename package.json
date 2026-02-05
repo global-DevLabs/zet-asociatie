@@ -1,6 +1,6 @@
 {
   "name": "zet_asociatie",
-  "version": "0.1.10",
+  "version": "0.1.15",
   "description": "Aplicatie de administrare membri",
   "author": "Zet Securty",
   "private": true,
@@ -89,7 +89,7 @@
   },
   "build": {
     "appId": "com.zet.asociatie",
-    "productName": "Zet Asociatie",
+    "productName": "Admin Membri",
     "directories": {
       "buildResources": "build",
       "output": "dist-electron"
@@ -172,7 +172,8 @@
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "requestedExecutionLevel": "asInvoker"
     },
     "mac": {
       "target": [

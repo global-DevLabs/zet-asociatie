@@ -7,7 +7,7 @@ let logPath = null;
 let logStream = null;
 let logStreamPath = null;
 let appRef = null;
-let useAppRoot = true; // when true and packaged, log goes to app root (e.g. C:\Program Files\Zet Asociatie)
+let useAppRoot = true; // when true and packaged, log goes to app root (e.g. C:\Program Files\Admin Membri)
 
 function getLogPath() {
   if (logPath && appRef !== undefined) return logPath;
@@ -21,10 +21,10 @@ function getLogPath() {
       }
     }
     if (!dir && process.platform === "win32" && process.env.APPDATA) {
-      dir = path.join(process.env.APPDATA, "Zet Asociatie");
+      dir = path.join(process.env.APPDATA, "Admin Membri");
     }
     if (!dir && process.platform === "darwin") {
-      dir = path.join(process.env.HOME || "", "Library", "Application Support", "Zet Asociatie");
+      dir = path.join(process.env.HOME || "", "Library", "Application Support", "Admin Membri");
     }
     if (!dir) {
       dir = process.cwd();

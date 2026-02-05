@@ -48,15 +48,15 @@ Do this **on a Windows machine** to produce a Windows installer (standalone app)
    This runs `version:bump` first (increments the patch version in `package.json`, e.g. 0.1.1 → 0.1.2), then builds the installer.
 6. **Output:** `dist-electron/` — e.g. NSIS installer (`.exe`) for Windows x64. Run it on the target PC to install the standalone app.
 
-On first launch, if Postgres was bundled, the app will set up the DB and config under `%APPDATA%\Zet Asociatie\`; otherwise configure an existing Postgres or env.
+On first launch, if Postgres was bundled, the app will set up the DB and config under `%APPDATA%\Admin Membri\`; otherwise configure an existing Postgres or env.
 
 ### Debug log (app opens then closes)
 
 If the app starts and then closes immediately, a **debug log** is written to a text file so you can see the error:
 
-- **Windows:** `%APPDATA%\Zet Asociatie\debug.log`  
-  (e.g. `C:\Users\<You>\AppData\Roaming\Zet Asociatie\debug.log`)
-- **macOS:** `~/Library/Application Support/Zet Asociatie/debug.log`
+- **Windows:** `%APPDATA%\Admin Membri\debug.log`  
+  (e.g. `C:\Users\<You>\AppData\Roaming\Admin Membri\debug.log`)
+- **macOS:** `~/Library/Application Support/Admin Membri/debug.log`
 
 Open the file in Notepad (or any text editor). The first line shows the log file path; the rest are timestamped entries (startup, Postgres setup, Next server, and any **ERROR** or **uncaughtException** / **unhandledRejection**). Use the last lines to see why the app exited.
 
@@ -94,23 +94,25 @@ If `resources/postgres-win` only contains the README (no binaries), the app stil
 
 **Important (bundled Postgres):** Do **not** run the app as Administrator (e.g. right‑click → “Run as administrator”). PostgreSQL refuses to start when run with administrative permissions. Start the app as a normal user. If you must run the app as Administrator, use [external Postgres](#using-an-existing-postgresql-install-postgres-first-eg-password-zet2026) instead (install Postgres, set `LOCAL_DB_URL`).
 
+**If you see "Database setup failed – PostgreSQL cannot run as Administrator":** The app shows this dialog when the bundled Postgres refuses to start. Do not use "Run as administrator". If you are logged in as the built-in **Administrator** account, create a standard (non-admin) Windows user and run Admin Membri from that account, or install PostgreSQL separately and set `LOCAL_DB_URL`. The installer is built with `requestedExecutionLevel: asInvoker` so a normal double-click does not request elevation.
+
 ### Using an existing PostgreSQL (install Postgres first, e.g. password Zet2026)
 
 You can install PostgreSQL yourself and have the app use it instead of the bundled one:
 
 1. **Install PostgreSQL** (e.g. from [postgresql.org/download/windows](https://www.postgresql.org/download/windows/) or EnterpriseDB). During setup, set the **postgres** user password (e.g. **Zet2026**).
-2. **Before the first run of Zet Asociatie**, set the environment variable **LOCAL_DB_URL** so the app can connect and create the database:
+2. **Before the first run of Admin Membri**, set the environment variable **LOCAL_DB_URL** so the app can connect and create the database:
    - URL format: `postgres://postgres:PASSWORD@127.0.0.1:5432/postgres`  
      Example for password **Zet2026**: `postgres://postgres:Zet2026@127.0.0.1:5432/postgres`
-   - The app will connect to the default `postgres` database, create the database `zet_asociatie` if it does not exist, run migrations, and write config to `%APPDATA%\zet_asociatie\config.json`. It will **not** start or use the bundled Postgres.
+   - The app will connect to the default `postgres` database, create the database `zet_asociatie` if it does not exist, run migrations, and write config to `%APPDATA%\Admin Membri\config.json` (or the app’s userData folder). It will **not** start or use the bundled Postgres.
 3. **How to set LOCAL_DB_URL on Windows:**
    - **Option A – System environment (permanent):**  
      Win+R → `sysdm.cpl` → Advanced → Environment Variables. Under “User” or “System”, add variable `LOCAL_DB_URL` = `postgres://postgres:Zet2026@127.0.0.1:5432/postgres`. Restart the app (or log off/on if needed).
    - **Option B – Batch file to launch the app:**  
-     Create a `.bat` file next to the app (e.g. `Start Zet Asociatie.bat`) with:
+     Create a `.bat` file next to the app (e.g. `Start Admin Membri.bat`) with:
      ```bat
      set LOCAL_DB_URL=postgres://postgres:Zet2026@127.0.0.1:5432/postgres
-     "C:\Program Files\Zet Asociatie\Zet Asociatie.exe"
+     "C:\Program Files\Admin Membri\Admin Membri.exe"
      ```
      Run the batch file to start the app. The variable is set only for that run.
 4. **Optional:** You can also set `JWT_SECRET` and `ENCRYPTION_SALT` (e.g. long random strings). If you do not set them, the app generates them and stores them in config.
@@ -148,10 +150,10 @@ npm run electron:build:mac     # Creates .dmg (and .app) in dist-electron/
 Or unpacked app only (no installer):
 
 ```bash
-npm run electron:pack:mac      # dist-electron/mac-unpacked/Zet Asociatie.app
+npm run electron:pack:mac      # dist-electron/mac-unpacked/Admin Membri.app
 ```
 
-Output: `dist-electron/` — e.g. `Zet Asociatie-0.1.0.dmg` and `Zet Asociatie.app`. Postgres bundling in this repo is set up for Windows; on Mac use a system or Homebrew Postgres or env config.
+Output: `dist-electron/` — e.g. `Admin Membri-0.1.0.dmg` and `Admin Membri.app`. Postgres bundling in this repo is set up for Windows; on Mac use a system or Homebrew Postgres or env config.
 
 **If `npm run build` fails with a Tailwind error** (e.g. `E.map is not a function` in `globals.css`), try: `rm -rf .next node_modules/.cache` and run `npm run build` again. If it still fails, it may be a Tailwind 4 + Next 16 compatibility issue in this environment; run the build on another machine or in CI.
 
@@ -165,13 +167,13 @@ This error means the app’s Electron runtime is missing `ffmpeg.dll` (used by C
   npm run build
   npm run electron:pack
   ```
-  Open `dist-electron\win-unpacked\`. Run `Zet Asociatie.exe` from that folder. Check whether `ffmpeg.dll` (or the whole Electron runtime) is next to the exe or under `resources\`. If it works here but not after NSIS install, the installer is likely stripping or moving files.
+  Open `dist-electron\win-unpacked\`. Run `Admin Membri.exe` from that folder. Check whether `ffmpeg.dll` (or the whole Electron runtime) is next to the exe or under `resources\`. If it works here but not after NSIS install, the installer is likely stripping or moving files.
 
 - **2. Antivirus / Windows Defender**  
-  Some security software quarantines or deletes `ffmpeg.dll`. Add an exclusion for the app folder (e.g. `C:\Program Files\Zet Asociatie` or `dist-electron\win-unpacked`) or temporarily disable real-time protection, then rebuild/reinstall and run again.
+  Some security software quarantines or deletes `ffmpeg.dll`. Add an exclusion for the app folder (e.g. `C:\Program Files\Admin Membri` or `dist-electron\win-unpacked`) or temporarily disable real-time protection, then rebuild/reinstall and run again.
 
 - **3. Run from the installed location**  
-  After installing via the NSIS installer, start the app from the Start Menu or from e.g. `C:\Program Files\Zet Asociatie\`. Do not copy only the `.exe` elsewhere; the `.exe` must stay with the rest of the files (DLLs, `resources\`).
+  After installing via the NSIS installer, start the app from the Start Menu or from e.g. `C:\Program Files\Admin Membri\`. Do not copy only the `.exe` elsewhere; the `.exe` must stay with the rest of the files (DLLs, `resources\`).
 
 - **4. Reinstall**  
   Uninstall completely, then run the installer again so all runtime files are written correctly.
@@ -180,22 +182,22 @@ This error means the app’s Electron runtime is missing `ffmpeg.dll` (used by C
 
 The Windows build uses an **assisted installer** (`oneClick: false`) so the uninstaller is created and registered in a standard way; this reduces "Installer integrity check has failed" issues. If you still see that error (e.g. from an older one-click build), remove the app manually:
 
-1. **Close the app** if it is running (Task Manager → end "Zet Asociatie" if needed).
+1. **Close the app** if it is running (Task Manager → end "Admin Membri" if needed).
 
 2. **Delete the install folder**  
    - Open File Explorer and go to `C:\Program Files\` (or `C:\Program Files (x86)\` if you used a 32‑bit install).  
-   - Delete the folder **Zet Asociatie** (right‑click → Delete; use "Continue" if Windows asks for admin rights).
+   - Delete the folder **Admin Membri** (right‑click → Delete; use "Continue" if Windows asks for admin rights).
 
 3. **Remove the uninstaller entry** (optional)  
-   - Settings → Apps → Installed apps → find "Zet Asociatie" → Uninstall. If it fails again, ignore it; the app files are already gone.  
-   - Or run `appwiz.cpl`, find "Zet Asociatie", select it, click Uninstall. If you get the same NSIS error, the entry may remain until you remove it via a registry fix or leave it; it will point to a missing path after you deleted the folder.
+   - Settings → Apps → Installed apps → find "Admin Membri" → Uninstall. If it fails again, ignore it; the app files are already gone.  
+   - Or run `appwiz.cpl`, find "Admin Membri", select it, click Uninstall. If you get the same NSIS error, the entry may remain until you remove it via a registry fix or leave it; it will point to a missing path after you deleted the folder.
 
 4. **App data (optional)**  
-   - To remove saved data and config (database, config.json): open Run (Win+R), type `%APPDATA%`, press Enter, then delete the folder **Zet Asociatie** if you want a full clean slate.  
+   - To remove saved data and config (database, config.json): open Run (Win+R), type `%APPDATA%`, press Enter, then delete the folder **Admin Membri** if you want a full clean slate.  
    - If you keep this folder, a new install will reuse the existing config and database.
 
 5. **Reinstall**  
-   - Run the new installer (e.g. `Zet Asociatie Setup 0.1.1.exe`) to install again.
+   - Run the new installer (e.g. `Admin Membri Setup 0.1.1.exe`) to install again.
 
 ### Troubleshooting: "Invalid file descriptor to ICU data received" (icu_util.cc)
 
@@ -207,7 +209,7 @@ This error means Chromium’s ICU data (e.g. `icudtl.dat`) is missing or not loa
   Building Windows on Mac (or Mac on Windows) can produce installers that lack the correct ICU/runtime files, so the app crashes with this error on launch.
 
 - **Don’t run the wrong executable.**  
-  Use the Windows build (e.g. `Zet Asociatie Setup x.x.x.exe` or `win-unpacked\Zet Asociatie.exe`) only on Windows. Use the Mac build (`.app` or `.dmg`) only on macOS.
+  Use the Windows build (e.g. `Admin Membri Setup x.x.x.exe` or `win-unpacked\Admin Membri.exe`) only on Windows. Use the Mac build (`.app` or `.dmg`) only on macOS.
 
 - **Clean rebuild.**  
   Delete `dist-electron/` and `node_modules`, run `npm install` and `npm run build`, then `npm run electron:build` again on the **target** OS.

@@ -267,10 +267,10 @@ function SetupForm() {
                       Unde se află jurnalul de depanare (debug.log):
                     </p>
                     <p className="mt-1 font-mono text-xs text-amber-900 dark:text-amber-100">
-                      Windows: %APPDATA%\Zet Asociatie\debug.log
+                      Windows: %APPDATA%\Admin Membri\debug.log
                     </p>
                     <p className="mt-0.5 font-mono text-xs text-amber-900 dark:text-amber-100">
-                      Mac: ~/Library/Application Support/Zet Asociatie/debug.log
+                      Mac: ~/Library/Application Support/Admin Membri/debug.log
                     </p>
                     <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
                       Reporniți aplicația, apoi verificați acest fișier pentru erori.
