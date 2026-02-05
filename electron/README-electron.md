@@ -4,11 +4,31 @@
 - `electron/postgres-setup.js` – first-run logic: initdb, create DB, run migrations, write config (when Postgres is bundled).
 - `electron/preload.js` – preload with `contextIsolation: true`, no Node in renderer.
 
+### Windows build requirements (dependencies)
+
+To **build** the app on Windows (not just run the installed .exe), the machine needs:
+
+| Requirement | Purpose |
+|-------------|--------|
+| **Node.js 18+** | Runtime for npm, Next.js, Electron. |
+| **npm** | Comes with Node. |
+| **Python 3.x** | Required by node-gyp for native modules (e.g. some npm dependencies). Install from [python.org](https://www.python.org/downloads/) or Microsoft Store; add to PATH. Then: `npm config set python "C:\Path\To\python.exe"`. |
+| **Visual Studio Build Tools** (or VS with C++) | Provides compiler for native addons. Install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with workload **"Desktop development with C++"**. Then set: `npm config set msvs_version 2022` (or `2019`). |
+| **Visual C++ Redistributable** (for PCs that only *run* the app) | If end users get errors about missing DLLs, install [VC++ Redistributable x64](https://aka.ms/vs/17/release/vc_redist.x64.exe) on the target PC. |
+
+**Verification script (run before building):**
+
+```bash
+npm run verify:windows-env
+```
+
+This checks: `node -v`, `npm -v`, `npm config get python`, `npm config get msvs_version`, and optionally `where python` on Windows. It does not install anything; it reports what is missing and gives hints. Fix any ✗ items before `npm install` / `npm run build`.
+
 ### Build standalone on Windows (for Windows)
 
 Do this **on a Windows machine** to produce a Windows installer (standalone app):
 
-1. **Prerequisites:** Node.js (v18+) and npm on Windows.
+1. **Prerequisites:** Node.js (v18+), npm, and (for native modules) Python + Visual Studio Build Tools as above. Run `npm run verify:windows-env` to confirm.
 2. **Clone and install:**
    ```bash
    cd zet-asociatie
