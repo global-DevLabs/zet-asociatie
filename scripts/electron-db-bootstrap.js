@@ -118,6 +118,116 @@ async function runBootstrap(options) {
   return { localDbUrl };
 }
 
+/**
+ * Use an existing Postgres (e.g. user installed and set password to Zet2026).
+ * Expects LOCAL_DB_URL like postgres://postgres:Zet2026@127.0.0.1:5432/postgres.
+ * Creates DB zet_asociatie if needed, runs migrations, writes config.json.
+ *
+ * @param {{ connectionUrl: string, configPath: string, appRoot?: string, dbName?: string, jwtSecret?: string, encryptionSalt?: string, log?: (s: string) => void, logVerbose?: (s: string) => void, logError?: (s: string) => void }} options
+ * @returns {Promise<{ localDbUrl: string } | null>}
+ */
+async function runExternalBootstrap(options) {
+  const connectionUrl = options.connectionUrl || process.env.LOCAL_DB_URL;
+  const configPath = options.configPath || process.env.ELECTRON_DB_CONFIG_PATH;
+  const appRoot = options.appRoot || process.cwd();
+  const dbName = options.dbName || process.env.ELECTRON_DB_NAME || "zet_asociatie";
+  const log = options.log || ((s) => console.log(s));
+  const logVerbose = options.logVerbose || noop;
+  const logError = options.logError || ((s) => console.error(s));
+
+  if (!connectionUrl || !configPath) {
+    logError("connectionUrl (or LOCAL_DB_URL) and configPath required for external bootstrap");
+    return null;
+  }
+
+  const jwtSecret = options.jwtSecret || process.env.JWT_SECRET || generateSecret();
+  const encryptionSalt = options.encryptionSalt || process.env.ENCRYPTION_SALT || generateSecret();
+
+  // Build URL for default DB (postgres) to run CREATE DATABASE
+  let defaultDbUrl;
+  try {
+    const u = new URL(connectionUrl);
+    u.pathname = "/postgres";
+    defaultDbUrl = u.toString();
+  } catch {
+    defaultDbUrl = connectionUrl.replace(/\/[^/]*$/, "/postgres");
+  }
+
+  const appDbUrl = defaultDbUrl.replace(/\/postgres$/, "/" + dbName);
+
+  log("Bootstrap (external): Connecting to Postgres...");
+  const { Client } = require("pg");
+  const client = new Client({ connectionString: defaultDbUrl });
+  try {
+    await client.connect();
+  } catch (err) {
+    logError("Bootstrap (external): Connect — FAILED: " + (err && err.message));
+    return null;
+  }
+  log("Bootstrap (external): Connect — success.");
+
+  log("Bootstrap (external): Creating database " + dbName + " if not exists...");
+  try {
+    await client.query(`CREATE DATABASE ${dbName}`);
+    log("Bootstrap (external): Create database — success.");
+  } catch (err) {
+    if (err.message && err.message.includes("already exists")) {
+      logVerbose("Bootstrap (external): Database already exists; continuing.");
+    } else {
+      logError("Bootstrap (external): Create database — FAILED: " + (err && err.message));
+      await client.end();
+      return null;
+    }
+  }
+  await client.end();
+
+  const port = (() => {
+    try {
+      const u = new URL(connectionUrl);
+      return parseInt(u.port || "5432", 10);
+    } catch {
+      return 5432;
+    }
+  })();
+
+  const config = {
+    localDbUrl: appDbUrl,
+    postgresBin: "",
+    postgresDataDir: "",
+    port,
+    jwtSecret,
+    encryptionSalt,
+  };
+
+  log("Bootstrap (external): Writing config to " + configPath + "...");
+  const fs = require("node:fs");
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  log("Bootstrap (external): Config written — success.");
+
+  const migrateScript = path.join(appRoot, "scripts", "migrate.js");
+  if (fs.existsSync(migrateScript)) {
+    log("Bootstrap (external): Running migrations...");
+    const result = spawnSync(process.execPath, [migrateScript], {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        USE_LOCAL_DB: "true",
+        LOCAL_DB_URL: appDbUrl,
+      },
+      stdio: "inherit",
+    });
+    if (result.status === 0) {
+      log("Bootstrap (external): Migrations — success.");
+    } else {
+      log("Bootstrap (external): Migrations — finished with exit code " + (result.status ?? "?") + " (config was written).");
+    }
+  } else {
+    logVerbose("Bootstrap (external): No migrate script found; skipping.");
+  }
+
+  return { localDbUrl: appDbUrl };
+}
+
 if (require.main === module) {
   runBootstrap({})
     .then((out) => process.exit(out ? 0 : 1))
@@ -127,4 +237,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runBootstrap };
+module.exports = { runBootstrap, runExternalBootstrap };

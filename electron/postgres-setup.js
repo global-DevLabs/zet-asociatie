@@ -67,18 +67,17 @@ function waitForPostgresTcp(port, maxAttempts = 120) {
 }
 
 /**
- * Load existing config if present and data dir is initialized.
+ * Load existing config if present.
+ * Accepts either: (1) config + bundled pgdata (PG_VERSION), or (2) config only (external Postgres).
  */
 function loadExistingConfig(app) {
   const configPath = getConfigPath(app);
-  const dataDir = getDataDir(app);
-  const pgVersion = path.join(dataDir, "PG_VERSION");
-  if (!fs.existsSync(configPath) || !fs.existsSync(pgVersion)) {
-    return null;
-  }
+  if (!fs.existsSync(configPath)) return null;
   try {
     const data = fs.readFileSync(configPath, "utf8");
-    return JSON.parse(data);
+    const config = JSON.parse(data);
+    if (!config.localDbUrl || !config.jwtSecret) return null;
+    return config;
   } catch {
     return null;
   }
@@ -98,17 +97,53 @@ async function ensurePostgresSetup(app) {
 
   const existing = loadExistingConfig(app);
   if (existing) {
-    debugLog.info("[SETUP] Existing config and data dir found; skipping setup.");
-    debugLog.verbose("[SETUP] Dependency: config.json — present, OK");
+    debugLog.info("[SETUP] Existing config found; skipping setup.");
+    debugLog.verbose("[SETUP] config.json — present, OK");
     return existing;
   }
 
-  debugLog.info("[SETUP] No existing config; checking dependencies...");
+  debugLog.info("[SETUP] No existing config; checking for external Postgres or bundled...");
+
+  // External Postgres: user installed Postgres and set LOCAL_DB_URL (e.g. password Zet2026)
+  const externalUrl = process.env.LOCAL_DB_URL && process.env.LOCAL_DB_URL.trim();
+  if (externalUrl) {
+    debugLog.info("[SETUP] LOCAL_DB_URL set — using external Postgres (no bundled).");
+    if (!fs.existsSync(baseDir)) {
+      fs.mkdirSync(baseDir, { recursive: true });
+      debugLog.verbose("[SETUP] Created directory: " + baseDir);
+    }
+    const appRoot = app.getAppPath ? app.getAppPath() : process.cwd();
+    let runExternalBootstrap;
+    try {
+      runExternalBootstrap = require(path.join(appRoot, "scripts", "electron-db-bootstrap.js")).runExternalBootstrap;
+    } catch (err) {
+      debugLog.error("[SETUP] Load runExternalBootstrap — FAILED: " + err.message);
+      return null;
+    }
+    const result = await runExternalBootstrap({
+      connectionUrl: externalUrl,
+      configPath,
+      appRoot,
+      dbName: DB_NAME,
+      jwtSecret: process.env.JWT_SECRET && process.env.JWT_SECRET.trim() || undefined,
+      encryptionSalt: process.env.ENCRYPTION_SALT && process.env.ENCRYPTION_SALT.trim() || undefined,
+      log: (msg) => debugLog.info("[SETUP] " + msg),
+      logVerbose: (msg) => debugLog.verbose("[SETUP] " + msg),
+      logError: (msg) => debugLog.error("[SETUP] " + msg),
+    });
+    if (result) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      debugLog.info("[SETUP] ========== External Postgres setup complete ==========");
+      return config;
+    }
+    debugLog.error("[SETUP] External bootstrap failed.");
+    return null;
+  }
 
   const binDir = getBundledPostgresBinDir();
   if (!binDir) {
     debugLog.error("[SETUP] Dependency: Bundled PostgreSQL — NOT FOUND (resources/postgres-win/bin).");
-    debugLog.info("[SETUP] Set POSTGRES_BIN and POSTGRES_DATA_DIR for manual setup, or bundle Postgres in resources/postgres-win.");
+    debugLog.info("[SETUP] Install Postgres and set LOCAL_DB_URL (e.g. postgres://postgres:Zet2026@127.0.0.1:5432/postgres), or bundle Postgres in resources/postgres-win.");
     return null;
   }
   debugLog.info(`[SETUP] Dependency: Bundled PostgreSQL — found at ${binDir}`);

@@ -92,6 +92,29 @@ When the app is built **with** PostgreSQL binaries bundled:
 
 If `resources/postgres-win` only contains the README (no binaries), the app still builds; first-run will not install Postgres. Configure `POSTGRES_BIN` and `POSTGRES_DATA_DIR` manually or use an existing Postgres install.
 
+### Using an existing PostgreSQL (install Postgres first, e.g. password Zet2026)
+
+You can install PostgreSQL yourself and have the app use it instead of the bundled one:
+
+1. **Install PostgreSQL** (e.g. from [postgresql.org/download/windows](https://www.postgresql.org/download/windows/) or EnterpriseDB). During setup, set the **postgres** user password (e.g. **Zet2026**).
+2. **Before the first run of Zet Asociatie**, set the environment variable **LOCAL_DB_URL** so the app can connect and create the database:
+   - URL format: `postgres://postgres:PASSWORD@127.0.0.1:5432/postgres`  
+     Example for password **Zet2026**: `postgres://postgres:Zet2026@127.0.0.1:5432/postgres`
+   - The app will connect to the default `postgres` database, create the database `zet_asociatie` if it does not exist, run migrations, and write config to `%APPDATA%\zet_asociatie\config.json`. It will **not** start or use the bundled Postgres.
+3. **How to set LOCAL_DB_URL on Windows:**
+   - **Option A – System environment (permanent):**  
+     Win+R → `sysdm.cpl` → Advanced → Environment Variables. Under “User” or “System”, add variable `LOCAL_DB_URL` = `postgres://postgres:Zet2026@127.0.0.1:5432/postgres`. Restart the app (or log off/on if needed).
+   - **Option B – Batch file to launch the app:**  
+     Create a `.bat` file next to the app (e.g. `Start Zet Asociatie.bat`) with:
+     ```bat
+     set LOCAL_DB_URL=postgres://postgres:Zet2026@127.0.0.1:5432/postgres
+     "C:\Program Files\Zet Asociatie\Zet Asociatie.exe"
+     ```
+     Run the batch file to start the app. The variable is set only for that run.
+4. **Optional:** You can also set `JWT_SECRET` and `ENCRYPTION_SALT` (e.g. long random strings). If you do not set them, the app generates them and stores them in config.
+
+After the first successful run, config is saved; you can start the app normally (no need to set `LOCAL_DB_URL` again unless you reinstall or delete the config).
+
 ### Running in development
 
 1. **Env and DB:** From the project root, run `node scripts/generate-env.js` to create `.env.local` with `LOCAL_DB_URL`, `JWT_SECRET`, and `ENCRYPTION_SALT`. Create the DB (`createdb zet_asociatie`), then `npm run migrate:local`. See main README for full steps.
