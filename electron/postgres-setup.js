@@ -91,42 +91,56 @@ async function ensurePostgresSetup(app) {
   const configPath = getConfigPath(app);
   const dataDir = getDataDir(app);
 
+  debugLog.info("[SETUP] ========== Starting first-run setup ==========");
+  debugLog.verbose(`[SETUP] baseDir=${baseDir} configPath=${configPath} dataDir=${dataDir}`);
+
   const existing = loadExistingConfig(app);
   if (existing) {
+    debugLog.info("[SETUP] Existing config and data dir found; skipping setup.");
+    debugLog.verbose("[SETUP] Dependency: config.json — present, OK");
     return existing;
   }
 
+  debugLog.info("[SETUP] No existing config; checking dependencies...");
+
   const binDir = getBundledPostgresBinDir();
   if (!binDir) {
-    debugLog.log("INFO", "[postgres-setup] Bundled Postgres not found at resources/postgres-win. Set POSTGRES_BIN and POSTGRES_DATA_DIR for manual setup.");
+    debugLog.error("[SETUP] Dependency: Bundled PostgreSQL — NOT FOUND (resources/postgres-win/bin).");
+    debugLog.info("[SETUP] Set POSTGRES_BIN and POSTGRES_DATA_DIR for manual setup, or bundle Postgres in resources/postgres-win.");
     return null;
   }
+  debugLog.info(`[SETUP] Dependency: Bundled PostgreSQL — found at ${binDir}`);
 
   const initdbPath = path.join(binDir, "initdb.exe");
   const postgresPath = path.join(binDir, "postgres.exe");
 
   if (!fs.existsSync(initdbPath) || !fs.existsSync(postgresPath)) {
-    debugLog.error(`[postgres-setup] initdb or postgres not found in ${binDir}`);
+    debugLog.error(`[SETUP] Dependency: initdb.exe / postgres.exe — NOT FOUND in ${binDir}`);
     return null;
   }
+  debugLog.info("[SETUP] Dependency: initdb.exe, postgres.exe — present, OK");
 
   if (!fs.existsSync(baseDir)) {
     fs.mkdirSync(baseDir, { recursive: true });
+    debugLog.verbose(`[SETUP] Created directory: ${baseDir}`);
   }
 
   if (!fs.existsSync(dataDir)) {
-    debugLog.info("[postgres-setup] Running initdb...");
+    debugLog.info("[SETUP] Step: Running initdb (initializing database cluster)...");
     const initResult = spawnSync(initdbPath, ["-D", dataDir, "-U", "postgres", "--encoding=UTF8"], {
       stdio: "inherit",
       env: { ...process.env, PGUSER: "postgres" },
     });
     if (initResult.status !== 0) {
-      debugLog.error("[postgres-setup] initdb failed");
+      debugLog.error("[SETUP] Step: initdb — FAILED (exit " + (initResult.status ?? "?") + ")");
       return null;
     }
+    debugLog.info("[SETUP] Step: initdb — success.");
+  } else {
+    debugLog.verbose("[SETUP] Data dir already exists; skipping initdb.");
   }
 
-  debugLog.info("[postgres-setup] Starting Postgres for first-run setup...");
+  debugLog.info("[SETUP] Step: Starting PostgreSQL server (temporary, for bootstrap)...");
   const postgresProcess = spawn(
     postgresPath,
     ["-D", dataDir, "-p", String(PG_PORT), "-h", "127.0.0.1"],
@@ -136,42 +150,50 @@ async function ensurePostgresSetup(app) {
   const ready = await waitForPostgresTcp(PG_PORT);
   if (!ready) {
     postgresProcess.kill();
-    debugLog.error("[postgres-setup] Postgres did not become ready");
+    debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready (timeout).");
     return null;
   }
+  debugLog.info("[SETUP] Step: PostgreSQL server — ready.");
 
-  // Give Postgres a moment to finish "starting up" before running bootstrap (avoids "database system is starting up")
+  debugLog.verbose("[SETUP] Waiting 3s for Postgres to finish startup...");
   await new Promise((r) => setTimeout(r, 3000));
 
   const appRoot = app.getAppPath ? app.getAppPath() : process.cwd();
-  debugLog.info(`[postgres-setup] appRoot=${appRoot} loading bootstrap...`);
+  debugLog.info("[SETUP] Step: Loading bootstrap script...");
   let runBootstrap;
   try {
     runBootstrap = require(path.join(appRoot, "scripts", "electron-db-bootstrap.js")).runBootstrap;
   } catch (err) {
-    debugLog.error(`[postgres-setup] Could not load bootstrap: ${err.message}`);
+    debugLog.error("[SETUP] Step: Load bootstrap — FAILED: " + err.message);
     postgresProcess.kill();
     return null;
   }
+  debugLog.verbose(`[SETUP] Bootstrap script path: ${path.join(appRoot, "scripts", "electron-db-bootstrap.js")}`);
 
   const bootstrapResult = await runBootstrap({
     configPath,
     port: String(PG_PORT),
     dbName: DB_NAME,
     appRoot,
+    log: (msg) => debugLog.info("[SETUP] " + msg),
+    logVerbose: (msg) => debugLog.verbose("[SETUP] " + msg),
+    logError: (msg) => debugLog.error("[SETUP] " + msg),
   });
 
   postgresProcess.kill();
+  debugLog.verbose("[SETUP] Stopped temporary Postgres process.");
 
   if (!bootstrapResult) {
-    debugLog.error("[postgres-setup] Bootstrap failed");
+    debugLog.error("[SETUP] Step: Bootstrap — FAILED.");
     return null;
   }
+  debugLog.info("[SETUP] Step: Bootstrap — success.");
 
   let config;
   try {
     config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  } catch {
+  } catch (err) {
+    debugLog.error("[SETUP] Reading config after bootstrap: " + (err && err.message));
     return null;
   }
 
@@ -180,9 +202,11 @@ async function ensurePostgresSetup(app) {
     config.postgresDataDir = dataDir;
     config.port = PG_PORT;
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+    debugLog.verbose("[SETUP] Wrote postgresBin/postgresDataDir to config.");
   }
 
-  debugLog.info(`[postgres-setup] First-run setup complete. Config at ${configPath}`);
+  debugLog.info("[SETUP] ========== First-run setup complete ==========");
+  debugLog.info(`[SETUP] Config written to: ${configPath}`);
   return config;
 }
 

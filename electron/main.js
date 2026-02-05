@@ -229,29 +229,36 @@ app.whenReady().then(async () => {
   let nextConfig = null;
   try {
     if (!isDev && app.isPackaged) {
-      debugLog.info("Running first-run / Postgres setup...");
+      debugLog.info("[MAIN] ========== Setup: Starting ==========");
+      debugLog.verbose("[MAIN] Step: Running first-run / Postgres setup...");
       const config = await ensurePostgresSetup(app);
       nextConfig = config;
       if (config) {
+        debugLog.info("[MAIN] Setup: Postgres setup — success.");
+        debugLog.verbose("[MAIN] Step: Applying config to process env.");
         process.env.LOCAL_DB_URL = config.localDbUrl;
         process.env.JWT_SECRET = config.jwtSecret;
         process.env.ENCRYPTION_SALT = config.encryptionSalt;
         const pg = getPostgresConfig();
+        debugLog.verbose("[MAIN] Step: Starting Postgres server...");
         startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
       } else {
-        debugLog.info("No Postgres config (first-run or skipped).");
+        debugLog.info("[MAIN] Setup: Postgres setup — skipped or failed (no config).");
       }
+      debugLog.info("[MAIN] ========== Setup: Complete ==========");
     } else {
+      debugLog.verbose("[MAIN] Setup: Skipped (dev or unpackaged). Using existing config or env.");
       const pg = getPostgresConfig();
       startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
     }
 
+    debugLog.verbose("[MAIN] Step: Starting Next.js standalone server...");
     startNextStandaloneServer(nextConfig);
-    debugLog.info("Waiting for Next server...");
+    debugLog.info("[MAIN] Waiting for Next server...");
     await waitForServerReady();
-    debugLog.info("Creating main window...");
+    debugLog.verbose("[MAIN] Step: Creating main window...");
     createMainWindow();
-    debugLog.info("Main window created.");
+    debugLog.info("[MAIN] Main window created.");
   } catch (err) {
     debugLog.error(`Startup error: ${err.stack || err.message}`);
     throw err;

@@ -5,14 +5,20 @@ const path = require("node:path");
 
 let logPath = null;
 let logStream = null;
+let logStreamPath = null;
 let appRef = null;
+let useAppRoot = true; // when true and packaged, log goes to app root (e.g. C:\Program Files\Zet Asociatie)
 
 function getLogPath() {
-  if (logPath) return logPath;
+  if (logPath && appRef !== undefined) return logPath;
   try {
     let dir = null;
     if (appRef && typeof appRef.getPath === "function") {
-      dir = appRef.getPath("userData");
+      if (useAppRoot && appRef.isPackaged) {
+        dir = path.dirname(appRef.getPath("exe"));
+      } else {
+        dir = appRef.getPath("userData");
+      }
     }
     if (!dir && process.platform === "win32" && process.env.APPDATA) {
       dir = path.join(process.env.APPDATA, "Zet Asociatie");
@@ -32,15 +38,28 @@ function getLogPath() {
 }
 
 function ensureStream() {
-  if (logStream) return;
+  const targetPath = getLogPath();
+  if (logStream && logStreamPath === targetPath) return;
   try {
-    const dir = path.dirname(getLogPath());
+    if (logStream) {
+      try { logStream.end(); } catch (_) {}
+      logStream = null;
+      logStreamPath = null;
+    }
+    const dir = path.dirname(targetPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    logStream = fs.createWriteStream(getLogPath(), { flags: "a" });
+    logStream = fs.createWriteStream(targetPath, { flags: "a" });
+    logStreamPath = targetPath;
+    logStream.on("error", () => {});
   } catch (e) {
-    // no-op
+    if (useAppRoot && e.code === "EACCES") {
+      useAppRoot = false;
+      logPath = null;
+      ensureStream();
+      write("WARN", `Could not write to app directory (EACCES); using fallback: ${getLogPath()}`);
+    }
   }
 }
 
@@ -57,7 +76,7 @@ function write(level, msg) {
       logStream.write(formatMessage(level, msg));
     }
   } catch (_) {}
-  if (level === "ERROR") {
+  if (level === "ERROR" || level === "WARN") {
     console.error(msg);
   } else {
     console.log(msg);
@@ -67,9 +86,15 @@ function write(level, msg) {
 module.exports = {
   init(app) {
     appRef = app;
+    logPath = null;
+    if (logStream) {
+      try { logStream.end(); } catch (_) {}
+      logStream = null;
+    }
     getLogPath();
     ensureStream();
-    this.info(`Debug log file: ${getLogPath()}`);
+    this.info(`Debug log file (verbose): ${getLogPath()}`);
+    this.verbose(`Platform: ${process.platform}, execPath: ${process.execPath}`);
   },
 
   log(level, msg) {
@@ -80,8 +105,16 @@ module.exports = {
     this.log("INFO", msg);
   },
 
+  verbose(msg) {
+    this.log("VERBOSE", msg);
+  },
+
   error(msg) {
     this.log("ERROR", msg);
+  },
+
+  warn(msg) {
+    this.log("WARN", msg);
   },
 
   getLogPath() {
