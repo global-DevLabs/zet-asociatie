@@ -21,7 +21,7 @@ export async function GET() {
       ok: hasConfig,
       message: hasConfig
         ? "Variabilele de mediu (LOCAL_DB_URL, JWT_SECRET) sunt setate corect."
-        : "Lipsesc LOCAL_DB_URL sau JWT_SECRET. Configurația se creează la prima pornire când Postgres pornește cu succes. Dacă apare această eroare, configurarea inițială (Postgres) a eșuat: verificați debug.log (vezi caseta de mai jos), reporniți aplicația ca Administrator sau verificați dacă portul 5432/5433 e liber.",
+        : "Lipsesc LOCAL_DB_URL sau JWT_SECRET. Configurația se creează la prima pornire când Postgres pornește cu succes. Dacă configurarea a eșuat: verificați debug.log (vezi caseta de mai jos). Dacă în log apare «administrative permissions», rulați aplicația ca utilizator normal (nu ca Administrator). Altfel verificați portul 5432/5433 sau folosiți Postgres extern (LOCAL_DB_URL).",
     });
 
     // 2. Database (PostgreSQL)
@@ -31,7 +31,7 @@ export async function GET() {
         name: "Bază de date (PostgreSQL)",
         ok: false,
         message:
-          "Nu se poate verifica — configurarea aplicației lipsește deoarece configurarea inițială (pornirea Postgres) nu s-a finalizat. Verificați debug.log pentru [SETUP] și reporniți aplicația.",
+          "Nu se poate verifica — configurarea lipsește deoarece pornirea Postgres nu s-a finalizat. Verificați debug.log ([SETUP]). Dacă apare «administrative permissions», rulați aplicația ca utilizator normal (nu ca Administrator).",
       });
     } else {
       let dbOk = false;

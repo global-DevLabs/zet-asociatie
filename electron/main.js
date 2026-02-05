@@ -195,8 +195,12 @@ function startNextStandaloneServer(configOverride) {
   if (!config?.localDbUrl || !config?.jwtSecret) {
     debugLog.error("Next server started without LOCAL_DB_URL or JWT_SECRET; login/setup will return 503.");
   }
-  // NODE_PATH so standalone server.js can resolve 'next' (packaged app may not have .next/standalone/node_modules fully unpacked)
-  const nodePath = path.join(appRoot, "node_modules");
+  // Prefer standalone's node_modules (has full Next.js from build); then app root for pg etc.
+  const standaloneNodeModules = path.join(standaloneDir, "node_modules");
+  const appNodeModules = path.join(appRoot, "node_modules");
+  const nodePath = process.env.NODE_PATH
+    ? `${standaloneNodeModules}${path.delimiter}${appNodeModules}${path.delimiter}${process.env.NODE_PATH}`
+    : `${standaloneNodeModules}${path.delimiter}${appNodeModules}`;
   const env = {
     ...process.env,
     PORT: String(nextProdPort),
@@ -205,7 +209,7 @@ function startNextStandaloneServer(configOverride) {
     JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET || "",
     ENCRYPTION_SALT: config?.encryptionSalt || process.env.ENCRYPTION_SALT || "",
     ELECTRON_RUN_AS_NODE: "1",
-    NODE_PATH: process.env.NODE_PATH ? `${nodePath}${path.delimiter}${process.env.NODE_PATH}` : nodePath,
+    NODE_PATH: nodePath,
   };
 
   nextServerProcess = spawn(process.execPath, [serverEntry], {

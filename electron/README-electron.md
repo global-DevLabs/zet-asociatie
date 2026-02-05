@@ -92,6 +92,8 @@ When the app is built **with** PostgreSQL binaries bundled:
 
 If `resources/postgres-win` only contains the README (no binaries), the app still builds; first-run will not install Postgres. Configure `POSTGRES_BIN` and `POSTGRES_DATA_DIR` manually or use an existing Postgres install.
 
+**Important (bundled Postgres):** Do **not** run the app as Administrator (e.g. right‑click → “Run as administrator”). PostgreSQL refuses to start when run with administrative permissions. Start the app as a normal user. If you must run the app as Administrator, use [external Postgres](#using-an-existing-postgresql-install-postgres-first-eg-password-zet2026) instead (install Postgres, set `LOCAL_DB_URL`).
+
 ### Using an existing PostgreSQL (install Postgres first, e.g. password Zet2026)
 
 You can install PostgreSQL yourself and have the app use it instead of the bundled one:

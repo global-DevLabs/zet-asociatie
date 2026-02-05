@@ -249,7 +249,12 @@ async function ensurePostgresSetup(app) {
     const exitedEarly = await waitForEarlyExit(postgresProcess, stderrRef, tryPort);
     if (exitedEarly) {
       const errText = stderrRef.getStderr();
-      debugLog.error("[SETUP] Postgres exited within a few seconds (port " + tryPort + "). Check: missing DLLs in resources/postgres-win/bin, run as Administrator, or antivirus.");
+      const isAdminRefused = errText && /administrative permissions|unprivileged user/i.test(errText);
+      if (isAdminRefused) {
+        debugLog.error("[SETUP] PostgreSQL refuses to run when the app is run as Administrator. Run the app as a normal user (do not right-click → Run as administrator). Or use external Postgres (install Postgres, set LOCAL_DB_URL).");
+      } else {
+        debugLog.error("[SETUP] Postgres exited within a few seconds (port " + tryPort + "). Check: missing DLLs in resources/postgres-win/bin, or antivirus.");
+      }
       if (errText) debugLog.error("[SETUP] Postgres stderr: " + errText.slice(-3000));
       postgresProcess = null;
       if (fs.existsSync(postmasterPid)) {
@@ -283,7 +288,7 @@ async function ensurePostgresSetup(app) {
 
   if (!postgresProcess || !(await waitForPostgresTcp(pgPort))) {
     if (postgresProcess) postgresProcess.kill();
-    debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready on 5432 or 5433. See stderr above or run app as Administrator.");
+    debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready on 5432 or 5433. See stderr above. If it says 'administrative permissions', run the app as a normal user (not as Administrator).");
     return null;
   }
 
