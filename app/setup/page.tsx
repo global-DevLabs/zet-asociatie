@@ -13,7 +13,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AlertCircle, Settings } from "lucide-react";
+import { AlertCircle, CheckCircle2, Settings, XCircle } from "lucide-react";
+
+type HealthService = {
+  id: string;
+  name: string;
+  ok: boolean;
+  message: string;
+};
 
 function SetupForm() {
   const [email, setEmail] = useState("");
@@ -22,6 +29,8 @@ function SetupForm() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [services, setServices] = useState<HealthService[]>([]);
+  const [healthLoading, setHealthLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -29,7 +38,13 @@ function SetupForm() {
     async function check() {
       try {
         const res = await fetch("/api/setup", { credentials: "include" });
-        const data = await res.json();
+        const text = await res.text();
+        let data: { setupRequired?: boolean } = { setupRequired: true };
+        try {
+          data = text ? JSON.parse(text) : data;
+        } catch {
+          // Non-JSON response (e.g. 500 plain text) → assume setup required
+        }
         if (mounted && !data.setupRequired) {
           router.replace("/login");
           return;
@@ -45,6 +60,48 @@ function SetupForm() {
       mounted = false;
     };
   }, [router]);
+
+  // Fetch service status for the status section
+  useEffect(() => {
+    let mounted = true;
+    async function fetchHealth() {
+      try {
+        const res = await fetch("/api/health", { credentials: "include" });
+        const text = await res.text();
+        let data: { services?: HealthService[] } = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          setServices([
+            {
+              id: "api",
+              name: "Server API",
+              ok: false,
+              message: "Răspuns invalid de la server.",
+            },
+          ]);
+          return;
+        }
+        if (mounted && Array.isArray(data.services)) {
+          setServices(data.services);
+        }
+      } catch {
+        if (mounted) {
+          setServices([
+            {
+              id: "api",
+              name: "Server API",
+              ok: false,
+              message: "Nu s-a putut contacta serverul.",
+            },
+          ]);
+        }
+      } finally {
+        if (mounted) setHealthLoading(false);
+      }
+    }
+    fetchHealth();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +123,13 @@ function SetupForm() {
         credentials: "include",
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { error?: string } = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: "Configurare eșuată." };
+      }
 
       if (!res.ok) {
         setError(data.error || "Configurare eșuată.");
@@ -102,7 +165,37 @@ function SetupForm() {
             Creați contul de administrator. Acest pas se face o singură dată.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
+          {/* Service status */}
+          <div className="rounded-lg border bg-muted/40 p-3">
+            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Status servicii
+            </h3>
+            {healthLoading ? (
+              <p className="text-xs text-muted-foreground">Se verifică...</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {services.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-start gap-2 text-sm"
+                  >
+                    {s.ok ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                    )}
+                    <span className={s.ok ? "text-foreground" : "text-destructive"}>
+                      <span className="font-medium">{s.name}:</span>{" "}
+                      {s.message}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">

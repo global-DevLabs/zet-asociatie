@@ -3,6 +3,9 @@ import { getJwtFromRequest } from "@/lib/auth/jwt";
 import { dbQuery } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
+  if (!process.env.LOCAL_DB_URL || !process.env.JWT_SECRET) {
+    return NextResponse.json({ user: null }, { status: 200 });
+  }
   try {
     const payload = getJwtFromRequest(request);
     if (!payload) {

@@ -40,7 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function init() {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
-        const data = await res.json();
+        const text = await res.text();
+        let data: { user?: unknown } = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          // Server returned non-JSON (e.g. "Internal Server Error" plain text)
+          if (!res.ok) console.error("Auth init: server returned", res.status, text?.slice(0, 80));
+        }
         if (mounted && data.user) {
           setUser(data.user);
         }
@@ -79,7 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: "include",
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { user?: unknown; error?: string } = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: res.ok ? undefined : "Login failed" };
+      }
 
       if (!res.ok) {
         AuditLogger.log({

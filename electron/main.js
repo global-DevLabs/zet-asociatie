@@ -144,7 +144,10 @@ function stopPostgresIfRunning() {
   }
 }
 
-function startNextStandaloneServer() {
+/**
+ * @param {Record<string,string>|null} configOverride - If provided (e.g. from ensurePostgresSetup), use this for env so the Next server always gets DB/JWT config.
+ */
+function startNextStandaloneServer(configOverride) {
   if (isDev) {
     return;
   }
@@ -169,16 +172,19 @@ function startNextStandaloneServer() {
   }
   debugLog.info(`Starting Next server: cwd=${standaloneDir} execPath=${process.execPath}`);
 
-  const config = loadConfig();
+  const config = configOverride || loadConfig();
+  if (!config?.localDbUrl || !config?.jwtSecret) {
+    debugLog.error("Next server started without LOCAL_DB_URL or JWT_SECRET; login/setup will return 503.");
+  }
   // NODE_PATH so standalone server.js can resolve 'next' (packaged app may not have .next/standalone/node_modules fully unpacked)
   const nodePath = path.join(appRoot, "node_modules");
   const env = {
     ...process.env,
     PORT: String(NEXT_PROD_PORT),
     USE_LOCAL_DB: "true",
-    LOCAL_DB_URL: config?.localDbUrl || process.env.LOCAL_DB_URL,
-    JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET,
-    ENCRYPTION_SALT: config?.encryptionSalt || process.env.ENCRYPTION_SALT,
+    LOCAL_DB_URL: config?.localDbUrl || process.env.LOCAL_DB_URL || "",
+    JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET || "",
+    ENCRYPTION_SALT: config?.encryptionSalt || process.env.ENCRYPTION_SALT || "",
     ELECTRON_RUN_AS_NODE: "1",
     NODE_PATH: process.env.NODE_PATH ? `${nodePath}${path.delimiter}${process.env.NODE_PATH}` : nodePath,
   };
@@ -214,10 +220,12 @@ app.whenReady().then(async () => {
   debugLog.init(app);
   debugLog.info(`App ready. isPackaged=${app.isPackaged} isDev=${isDev}`);
 
+  let nextConfig = null;
   try {
     if (!isDev && app.isPackaged) {
       debugLog.info("Running first-run / Postgres setup...");
       const config = await ensurePostgresSetup(app);
+      nextConfig = config;
       if (config) {
         process.env.LOCAL_DB_URL = config.localDbUrl;
         process.env.JWT_SECRET = config.jwtSecret;
@@ -232,7 +240,7 @@ app.whenReady().then(async () => {
       startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
     }
 
-    startNextStandaloneServer();
+    startNextStandaloneServer(nextConfig);
     debugLog.info("Waiting for Next server...");
     await waitForServerReady();
     debugLog.info("Creating main window...");

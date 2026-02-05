@@ -35,7 +35,16 @@ function LoginForm() {
     }
     let mounted = true;
     fetch("/api/setup", { credentials: "include" })
-      .then((res) => res.json())
+      .then((res) => res.text())
+      .then((text) => {
+        let data: { setupRequired?: boolean } = { setupRequired: true };
+        try {
+          data = text ? JSON.parse(text) : data;
+        } catch {
+          data = { setupRequired: true };
+        }
+        return data;
+      })
       .then((data) => {
         if (mounted) {
           if (data.setupRequired) {

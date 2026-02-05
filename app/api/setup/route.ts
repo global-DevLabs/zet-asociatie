@@ -3,8 +3,23 @@ import { dbQuery } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/local-auth";
 import { randomUUID } from "node:crypto";
 
+const CONFIG_MESSAGE =
+  "Application is not configured. Please restart the application. If the problem continues, check the application log.";
+
+function checkConfig() {
+  if (!process.env.LOCAL_DB_URL || !process.env.JWT_SECRET) {
+    return NextResponse.json(
+      { error: CONFIG_MESSAGE, setupRequired: true },
+      { status: 503 }
+    );
+  }
+  return null;
+}
+
 /** Returns whether first-run setup is still required (no admin with password). */
 export async function GET() {
+  const configError = checkConfig();
+  if (configError) return configError;
   try {
     const { rows } = await dbQuery<{ count: string }>(
       `SELECT COUNT(*) AS count FROM profiles
@@ -14,15 +29,19 @@ export async function GET() {
     return NextResponse.json({ setupRequired: count === 0 });
   } catch (err) {
     console.error("Setup status error:", err);
+    const message = err instanceof Error ? err.message : "";
+    const isConfig = /LOCAL_DB_URL|JWT_SECRET|not set|not configured/i.test(message);
     return NextResponse.json(
-      { error: "Could not check setup status", setupRequired: true },
-      { status: 500 }
+      { error: isConfig ? CONFIG_MESSAGE : "Could not check setup status", setupRequired: true },
+      { status: isConfig ? 503 : 500 }
     );
   }
 }
 
 /** Creates the first admin user. Only allowed when no admin with password exists. */
 export async function POST(request: NextRequest) {
+  const configError = checkConfig();
+  if (configError) return configError;
   try {
     const { rows: adminRows } = await dbQuery<{ count: string }>(
       `SELECT COUNT(*) AS count FROM profiles
@@ -87,9 +106,11 @@ export async function POST(request: NextRequest) {
     );
   } catch (err) {
     console.error("Setup POST error:", err);
+    const message = err instanceof Error ? err.message : "";
+    const isConfig = /LOCAL_DB_URL|JWT_SECRET|not set|not configured/i.test(message);
     return NextResponse.json(
-      { error: "Setup failed" },
-      { status: 500 }
+      { error: isConfig ? CONFIG_MESSAGE : "Setup failed" },
+      { status: isConfig ? 503 : 500 }
     );
   }
 }

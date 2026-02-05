@@ -3,7 +3,16 @@ import { dbQuery } from "@/lib/db";
 import { verifyPassword, issueJwt } from "@/lib/auth/local-auth";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/jwt";
 
+const CONFIG_MESSAGE =
+  "Application is not configured. Please restart the application. If the problem continues, check the application log.";
+
 export async function POST(request: NextRequest) {
+  if (!process.env.LOCAL_DB_URL || !process.env.JWT_SECRET) {
+    return NextResponse.json(
+      { error: CONFIG_MESSAGE },
+      { status: 503 }
+    );
+  }
   try {
     const body = await request.json();
     const { email, password } = body;
@@ -78,9 +87,11 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (err) {
     console.error("Login error:", err);
+    const message = err instanceof Error ? err.message : "";
+    const isConfig = /LOCAL_DB_URL|JWT_SECRET|not set|not configured/i.test(message);
     return NextResponse.json(
-      { error: "Login failed" },
-      { status: 500 }
+      { error: isConfig ? CONFIG_MESSAGE : "Login failed" },
+      { status: isConfig ? 503 : 500 }
     );
   }
 }
