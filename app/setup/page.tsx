@@ -261,6 +261,22 @@ function SetupForm() {
                     </li>
                   ))}
                 </ul>
+                {services.some((s) => !s.ok) && (
+                  <div className="mt-3 rounded-md border border-amber-200 bg-amber-50/80 p-2.5 dark:border-amber-800 dark:bg-amber-900/20">
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                      Unde se află jurnalul de depanare (debug.log):
+                    </p>
+                    <p className="mt-1 font-mono text-xs text-amber-900 dark:text-amber-100">
+                      Windows: %APPDATA%\Zet Asociatie\debug.log
+                    </p>
+                    <p className="mt-0.5 font-mono text-xs text-amber-900 dark:text-amber-100">
+                      Mac: ~/Library/Application Support/Zet Asociatie/debug.log
+                    </p>
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      Reporniți aplicația, apoi verificați acest fișier pentru erori.
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </div>

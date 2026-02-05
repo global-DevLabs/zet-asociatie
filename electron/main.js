@@ -3,8 +3,13 @@ const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
 const { spawn } = require("node:child_process");
-const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
 const debugLog = require("./debug-log");
+
+// Create debug.log as early as possible (before app.whenReady), so crashes are logged.
+// Uses %APPDATA%\Zet Asociatie\ on Windows when app is not yet ready.
+debugLog.init(null);
+
+const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
 
 const NEXT_DEV_URL = process.env.NEXT_APP_URL || "http://localhost:3000";
 const NEXT_PROD_PORT = process.env.PORT || 3000;
@@ -217,8 +222,9 @@ function stopNextStandaloneServer() {
 }
 
 app.whenReady().then(async () => {
-  debugLog.init(app);
+  debugLog.init(app); // set appRef so future logs use app.getPath("userData")
   debugLog.info(`App ready. isPackaged=${app.isPackaged} isDev=${isDev}`);
+  debugLog.info(`Debug log file: ${debugLog.getLogPath()}`);
 
   let nextConfig = null;
   try {

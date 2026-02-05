@@ -17,6 +17,9 @@ function getLogPath() {
     if (!dir && process.platform === "win32" && process.env.APPDATA) {
       dir = path.join(process.env.APPDATA, "Zet Asociatie");
     }
+    if (!dir && process.platform === "darwin") {
+      dir = path.join(process.env.HOME || "", "Library", "Application Support", "Zet Asociatie");
+    }
     if (!dir) {
       dir = process.cwd();
     }
