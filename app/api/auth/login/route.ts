@@ -4,7 +4,7 @@ import { verifyPassword, issueJwt } from "@/lib/auth/local-auth";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/jwt";
 
 const CONFIG_MESSAGE =
-  "Application is not configured. Please restart the application. If the problem continues, check the application log.";
+  "Application is not configured. Config is created on first run when PostgreSQL starts successfully. If you see this, first-run setup failed: check debug.log for [SETUP] errors, restart the app as Administrator, or ensure port 5432/5433 is free.";
 
 export async function POST(request: NextRequest) {
   if (!process.env.LOCAL_DB_URL || !process.env.JWT_SECRET) {

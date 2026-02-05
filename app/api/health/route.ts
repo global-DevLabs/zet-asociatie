@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const services: HealthService[] = [];
 
-    // 1. Application config (LOCAL_DB_URL, JWT_SECRET)
+    // 1. Application config (LOCAL_DB_URL, JWT_SECRET) — written by first-run Postgres setup
     const hasConfig =
       !!process.env.LOCAL_DB_URL?.trim() && !!process.env.JWT_SECRET?.trim();
     services.push({
@@ -21,7 +21,7 @@ export async function GET() {
       ok: hasConfig,
       message: hasConfig
         ? "Variabilele de mediu (LOCAL_DB_URL, JWT_SECRET) sunt setate corect."
-        : "Lipsesc LOCAL_DB_URL sau JWT_SECRET. Reporniți aplicația după prima instalare.",
+        : "Lipsesc LOCAL_DB_URL sau JWT_SECRET. Configurația se creează la prima pornire când Postgres pornește cu succes. Dacă apare această eroare, configurarea inițială (Postgres) a eșuat: verificați debug.log (vezi caseta de mai jos), reporniți aplicația ca Administrator sau verificați dacă portul 5432/5433 e liber.",
     });
 
     // 2. Database (PostgreSQL)
@@ -30,7 +30,8 @@ export async function GET() {
         id: "database",
         name: "Bază de date (PostgreSQL)",
         ok: false,
-        message: "Nu se poate verifica — configurarea aplicației lipsește. Reporniți aplicația.",
+        message:
+          "Nu se poate verifica — configurarea aplicației lipsește deoarece configurarea inițială (pornirea Postgres) nu s-a finalizat. Verificați debug.log pentru [SETUP] și reporniți aplicația.",
       });
     } else {
       let dbOk = false;
