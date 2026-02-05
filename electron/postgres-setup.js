@@ -44,8 +44,9 @@ function getBundledPostgresBinDir() {
 /**
  * Wait for Postgres to accept TCP connections and finish "starting up" (no pg dependency in main process).
  * Uses more attempts and longer delay so "database system is starting up" does not run bootstrap too early.
+ * On Windows / existing data dir, startup can be slower — use more attempts.
  */
-function waitForPostgresTcp(port, maxAttempts = 60) {
+function waitForPostgresTcp(port, maxAttempts = 120) {
   const net = require("node:net");
   return new Promise((resolve) => {
     let attempts = 0;
@@ -57,7 +58,7 @@ function waitForPostgresTcp(port, maxAttempts = 60) {
       socket.on("error", () => {
         attempts++;
         if (attempts >= maxAttempts) resolve(false);
-        else setTimeout(tryConnect, 800);
+        else setTimeout(tryConnect, 1000);
       });
     }
     tryConnect();
@@ -147,10 +148,27 @@ async function ensurePostgresSetup(app) {
     { stdio: "pipe", env: { ...process.env, PGUSER: "postgres" } }
   );
 
+  let postgresStderr = "";
+  postgresProcess.stderr.on("data", (chunk) => {
+    const text = (chunk && chunk.toString()) || "";
+    postgresStderr += text;
+    debugLog.verbose("[SETUP] Postgres stderr: " + text.trim());
+  });
+  postgresProcess.stdout.on("data", (chunk) => {
+    debugLog.verbose("[SETUP] Postgres stdout: " + (chunk && chunk.toString()).trim());
+  });
+  postgresProcess.on("exit", (code, signal) => {
+    if (code != null && code !== 0) {
+      debugLog.error("[SETUP] Postgres process exited code=" + code + " signal=" + signal);
+      if (postgresStderr) debugLog.error("[SETUP] Postgres stderr (last): " + postgresStderr.slice(-2000));
+    }
+  });
+
   const ready = await waitForPostgresTcp(PG_PORT);
   if (!ready) {
     postgresProcess.kill();
-    debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready (timeout).");
+    debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready (timeout ~120s).");
+    if (postgresStderr) debugLog.error("[SETUP] Postgres stderr: " + postgresStderr.slice(-3000));
     return null;
   }
   debugLog.info("[SETUP] Step: PostgreSQL server — ready.");

@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
+const net = require("node:net");
 const { spawn } = require("node:child_process");
 const debugLog = require("./debug-log");
 
@@ -12,12 +13,13 @@ debugLog.init(null);
 const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
 
 const NEXT_DEV_URL = process.env.NEXT_APP_URL || "http://localhost:3000";
-const NEXT_PROD_PORT = process.env.PORT || 3000;
+/** Packaged app: set in whenReady after finding a free port to avoid EADDRINUSE. */
+let nextProdPort = parseInt(process.env.PORT || "3000", 10);
 const DEFAULT_PG_PORT = 5432;
 
 /** Base URL for the app (no trailing slash). Load /login so user sees login/setup first. */
 function getAppBaseUrl() {
-  return isDev ? NEXT_DEV_URL : `http://127.0.0.1:${NEXT_PROD_PORT}`;
+  return isDev ? NEXT_DEV_URL : `http://127.0.0.1:${nextProdPort}`;
 }
 const LOGIN_PATH = "/login";
 
@@ -85,10 +87,22 @@ function createMainWindow() {
   win.once("ready-to-show", () => win.show());
 }
 
+/** Returns a promise that resolves with a free port on 127.0.0.1 (e.g. 3000, 3001, ...). */
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+    server.on("error", reject);
+  });
+}
+
 /** Wait for the Next server to respond (packaged app). Returns a promise that resolves when ready or after maxAttempts. */
 function waitForServerReady() {
   if (isDev) return Promise.resolve();
-  const port = parseInt(NEXT_PROD_PORT, 10);
+  const port = nextProdPort;
   const maxAttempts = 40;
   const intervalMs = 500;
   return new Promise((resolve) => {
@@ -185,7 +199,7 @@ function startNextStandaloneServer(configOverride) {
   const nodePath = path.join(appRoot, "node_modules");
   const env = {
     ...process.env,
-    PORT: String(NEXT_PROD_PORT),
+    PORT: String(nextProdPort),
     USE_LOCAL_DB: "true",
     LOCAL_DB_URL: config?.localDbUrl || process.env.LOCAL_DB_URL || "",
     JWT_SECRET: config?.jwtSecret || process.env.JWT_SECRET || "",
@@ -250,6 +264,16 @@ app.whenReady().then(async () => {
       debugLog.verbose("[MAIN] Setup: Skipped (dev or unpackaged). Using existing config or env.");
       const pg = getPostgresConfig();
       startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port);
+    }
+
+    if (!isDev) {
+      try {
+        const port = await findFreePort();
+        nextProdPort = port;
+        debugLog.verbose("[MAIN] Using port " + nextProdPort + " for Next.js server (avoid EADDRINUSE).");
+      } catch (err) {
+        debugLog.error("[MAIN] findFreePort failed: " + (err && err.message) + "; using " + nextProdPort);
+      }
     }
 
     debugLog.verbose("[MAIN] Step: Starting Next.js standalone server...");
