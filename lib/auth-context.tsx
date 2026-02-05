@@ -11,7 +11,6 @@ import {
 import { useRouter } from "next/navigation";
 import type { User, UserRole } from "@/types";
 import { AuditLogger } from "@/lib/audit-logger";
-import { createBrowserClient } from "@/lib/supabase/client";
 
 interface AuthContextType {
   user: User | null;
@@ -32,78 +31,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const loadingRef = useRef(true);
-  const supabaseRef = useRef(createBrowserClient());
 
   const isAuthenticated = user !== null;
 
-  // Helper function to fetch user profile - moved outside useEffect to be reusable
-  const fetchProfile = async (userId: string, email: string): Promise<User> => {
-    const supabase = supabaseRef.current;
-
-    // Always return a basic user - profile fetch is optional
-    const basicUser: User = {
-      id: userId,
-      email: email,
-      firstName: email.split("@")[0],
-      lastName: "",
-      role: "viewer" as UserRole,
+  // Helper function to convert api user to User type
+  const convertApiUserToUser = (apiUser: any): User => {
+    const nameParts = (apiUser.fullName || apiUser.email.split("@")[0]).split(
+      " "
+    );
+    return {
+      id: apiUser.id,
+      email: apiUser.email,
+      firstName: nameParts[0] || "",
+      lastName: nameParts.slice(1).join(" ") || "",
+      role: (apiUser.role || "viewer") as UserRole,
       createdAt: new Date().toISOString(),
     };
-
-    try {
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      if (error) {
-        console.warn("Profile fetch failed, using basic user:", error.message);
-        return basicUser;
-      }
-
-      if (profile) {
-        const nameParts = (profile.full_name || email.split("@")[0]).split(" ");
-        return {
-          id: profile.id,
-          email: profile.email || email,
-          firstName: nameParts[0] || "",
-          lastName: nameParts.slice(1).join(" ") || "",
-          role: (profile.role || "viewer") as UserRole,
-          createdAt: profile.created_at,
-        };
-      }
-
-      return basicUser;
-    } catch (err) {
-      console.warn("Profile fetch error:", err);
-      return basicUser;
-    }
   };
 
+  // Check if user is already logged in (from JWT cookie)
   useEffect(() => {
     let mounted = true;
-    const supabase = supabaseRef.current;
 
     async function init() {
       try {
-        // Use getUser() instead of getSession() to get fresh data from server
-        const {
-          data: { user: authUser },
-          error,
-        } = await supabase.auth.getUser();
+        const response = await fetch("/api/auth/user", {
+          method: "GET",
+          credentials: "include",
+        });
 
-        if (error) {
-          // Auth error is expected when not logged in, don't log as error
-          if (error.message !== "Auth session missing!") {
-            console.error("Auth check error:", error);
-          }
-        }
-
-        if (authUser && mounted) {
-          const profile = await fetchProfile(authUser.id, authUser.email || "");
-          if (mounted) {
-            setUser(profile);
+        if (response.ok && mounted) {
+          const data = await response.json();
+          if (data.user) {
+            setUser(convertApiUserToUser(data.user));
           }
         }
       } catch (err) {
@@ -127,39 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     init();
 
-    // Auth state listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      if (
-        (event === "SIGNED_IN" ||
-          event === "TOKEN_REFRESHED" ||
-          event === "INITIAL_SESSION") &&
-        session?.user
-      ) {
-        const profile = await fetchProfile(
-          session.user.id,
-          session.user.email || ""
-        );
-        if (mounted) {
-          setUser(profile);
-          // Ensure loading is false after auth state resolves
-          if (loadingRef.current) {
-            loadingRef.current = false;
-            setIsLoading(false);
-          }
-        }
-      } else if (event === "SIGNED_OUT") {
-        setUser(null);
-      }
-    });
-
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -168,44 +98,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const supabase = supabaseRef.current;
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) {
+      if (!response.ok) {
+        const data = await response.json();
         AuditLogger.log({
           user: null,
           actionType: "LOGIN_FAILED",
           module: "auth",
           summary: `Failed login attempt for ${email}`,
-          metadata: { email, error: error.message },
+          metadata: { email, error: data.error },
           isError: true,
         });
-        return { success: false, error: error.message };
+        return { success: false, error: data.error || "Login failed" };
       }
 
-      if (!data.user) {
-        return { success: false, error: "No user returned" };
-      }
-
-      // Directly fetch and set the user profile instead of waiting for onAuthStateChange
-      // This ensures the UI updates immediately after successful login
-      const profile = await fetchProfile(data.user.id, data.user.email || "");
-      setUser(profile);
+      const data = await response.json();
+      const user = convertApiUserToUser(data.user);
+      setUser(user);
 
       AuditLogger.log({
-        user: profile,
+        user,
         actionType: "LOGIN",
         module: "auth",
-        summary: `${profile.firstName} ${profile.lastName} logged in`,
+        summary: `${user.firstName} ${user.lastName} logged in`,
       });
 
       return { success: true };
-    } catch (err) {
+    } catch (err: any) {
       console.error("Login error:", err);
-      return { success: false, error: "An unexpected error occurred" };
+      return {
+        success: false,
+        error: err.message || "An unexpected error occurred",
+      };
     }
   };
 
@@ -220,8 +150,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const supabase = createBrowserClient();
-      await supabase.auth.signOut();
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
     } catch (err) {
       console.error("Logout error:", err);
     }

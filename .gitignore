@@ -28,3 +28,6 @@ next-env.d.ts
 
 # cursor
 .cursor/
+
+# postgres
+/resources/postgres-win

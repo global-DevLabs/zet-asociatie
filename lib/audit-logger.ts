@@ -1,5 +1,4 @@
 import type { AuditLog, AuditActionType, AuditModule, User } from "@/types"
-import { createBrowserClient } from "@/lib/supabase/client"
 
 // Get browser info safely
 function getBrowserInfo() {
@@ -72,34 +71,27 @@ export class AuditLogger {
     isError?: boolean
   }): Promise<void> {
     try {
-      const browserInfo = getBrowserInfo()
-      const supabase = createBrowserClient()
-
       // Mask sensitive data in metadata
       const safeMetadata = params.metadata ? maskSensitiveData(params.metadata) : undefined
 
-      const auditLog = {
-        id: this.generateId(),
-        timestamp: new Date().toISOString(),
-        actor_user_id: params.user?.id || "anonymous",
-        actor_name: params.user ? `${params.user.firstName} ${params.user.lastName}` : "Anonymous",
-        actor_role: params.user?.role || "viewer",
-        action_type: params.actionType,
+      const payload = {
+        actionType: params.actionType,
         module: params.module,
-        entity_type: params.entityType,
-        entity_id: params.entityId,
-        entity_code: params.entityCode,
         summary: params.summary,
         metadata: safeMetadata,
-        user_agent: browserInfo.userAgent,
-        request_id: this.generateRequestId(),
-        is_error: params.isError || false,
+        isError: params.isError || false,
+        userId: params.user?.id || null,
       }
 
-      const { error } = await supabase.from("audit_logs").insert(auditLog)
+      const response = await fetch("/api/audit-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      })
 
-      if (error) {
-        console.warn("Failed to insert audit log:", error)
+      if (!response.ok) {
+        console.warn("Failed to write audit log")
       }
     } catch (error) {
       console.warn("Failed to write audit log:", error)
@@ -108,34 +100,34 @@ export class AuditLogger {
 
   static async getLogs(limit: number = 100): Promise<AuditLog[]> {
     try {
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("*")
-        .order("timestamp", { ascending: false })
-        .limit(limit)
+      const response = await fetch(`/api/audit-logs?limit=${limit}`, {
+        method: "GET",
+        credentials: "include",
+      })
 
-      if (error) {
-        console.warn("Failed to fetch audit logs:", error)
+      if (!response.ok) {
+        console.warn("Failed to fetch audit logs")
         return []
       }
 
-      return (data || []).map((row) => ({
+      const data = await response.json()
+
+      return (data.logs || []).map((row: any) => ({
         id: row.id,
-        timestamp: row.timestamp,
-        actorUserId: row.actor_user_id,
-        actorName: row.actor_name,
-        actorRole: row.actor_role,
+        timestamp: row.created_at,
+        actorUserId: row.user_id,
+        actorName: row.summary,
+        actorRole: "system",
         actionType: row.action_type,
         module: row.module,
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        entityCode: row.entity_code,
+        entityType: undefined,
+        entityId: undefined,
+        entityCode: undefined,
         summary: row.summary,
         metadata: row.metadata,
-        userAgent: row.user_agent,
-        requestId: row.request_id,
-        isError: row.is_error,
+        userAgent: undefined,
+        requestId: row.id,
+        isError: row.is_error === 1,
       }))
     } catch {
       return []
@@ -143,8 +135,8 @@ export class AuditLogger {
   }
 
   static async clearLogs(): Promise<void> {
-    // Only admins can clear logs - this would be done via Supabase dashboard
-    console.warn("Audit log clearing should be done via Supabase dashboard")
+    // Only admins can clear logs - this would be done via admin API
+    console.warn("Audit log clearing should be done via admin panel")
   }
 
   static async exportLogs(): Promise<AuditLog[]> {

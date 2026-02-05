@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { jwtVerify } from "jose";
+import { listUsers, createUser, getUserProfile } from "@/lib/auth-utils";
+import { v4 as uuid } from "uuid";
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "supersecretkey-change-in-production"
+);
 
 /**
  * GET /api/admin/users
@@ -8,49 +13,39 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify the caller is authenticated
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Verify the caller is authenticated and is admin
+    const token = request.cookies.get("auth_token")?.value;
 
-    if (authError || !user) {
+    if (!token) {
       return NextResponse.json(
         { error: "Unauthorized - not authenticated" },
         { status: 401 }
       );
     }
 
-    // Verify the caller is an admin
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role, is_active")
-      .eq("id", user.id)
-      .single();
+    let user: any;
+    try {
+      const verified = await jwtVerify(token, JWT_SECRET);
+      user = verified.payload;
+    } catch (err) {
+      return NextResponse.json(
+        { error: "Unauthorized - invalid token" },
+        { status: 401 }
+      );
+    }
 
-    if (profileError || !profile || profile.role !== "admin" || !profile.is_active) {
+    // Verify the caller is an admin
+    if (user.role !== "admin") {
       return NextResponse.json(
         { error: "Forbidden - admin access required" },
         { status: 403 }
       );
     }
 
-    // Fetch all profiles (using regular client with RLS - admin can see all)
-    const { data: profiles, error: fetchError } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, role, is_active, created_at")
-      .order("created_at", { ascending: false });
+    // Fetch all users
+    const users = listUsers();
 
-    if (fetchError) {
-      console.error("Error fetching profiles:", fetchError);
-      return NextResponse.json(
-        { error: "Failed to fetch users" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ users: profiles });
+    return NextResponse.json({ users });
   } catch (error) {
     console.error("Error in GET /api/admin/users:", error);
     return NextResponse.json(
@@ -63,33 +58,34 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/admin/users
  * Create a new user (admin only)
- * 
+ *
  * Body: { email: string, password: string, full_name?: string, role: 'admin' | 'editor' | 'viewer' }
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify the caller is authenticated
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Verify the caller is authenticated and is admin
+    const token = request.cookies.get("auth_token")?.value;
 
-    if (authError || !user) {
+    if (!token) {
       return NextResponse.json(
         { error: "Unauthorized - not authenticated" },
         { status: 401 }
       );
     }
 
-    // Verify the caller is an admin
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role, is_active")
-      .eq("id", user.id)
-      .single();
+    let user: any;
+    try {
+      const verified = await jwtVerify(token, JWT_SECRET);
+      user = verified.payload;
+    } catch (err) {
+      return NextResponse.json(
+        { error: "Unauthorized - invalid token" },
+        { status: 401 }
+      );
+    }
 
-    if (profileError || !profile || profile.role !== "admin" || !profile.is_active) {
+    // Verify the caller is an admin
+    if (user.role !== "admin") {
       return NextResponse.json(
         { error: "Forbidden - admin access required" },
         { status: 403 }
@@ -133,62 +129,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create user using admin client
-    const adminClient = getSupabaseAdmin();
-    const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+    // Create user
+    const userId = uuid();
+    const result = createUser(
+      userId,
       email,
       password,
-      email_confirm: true, // Auto-confirm email
-      user_metadata: {
-        full_name: full_name || email.split("@")[0],
-        role, // This will be used by the trigger to set the profile role
-      },
-    });
+      full_name || email.split("@")[0],
+      role as "admin" | "editor" | "viewer"
+    );
 
-    if (createError) {
-      console.error("Error creating user:", createError);
-      
+    if (!result.success) {
       // Check for duplicate email error
-      if (createError.message.includes("already") || createError.message.includes("exists")) {
+      if (result.error?.includes("Email")) {
         return NextResponse.json(
           { error: "A user with this email already exists" },
           { status: 409 }
         );
       }
-      
+
       return NextResponse.json(
-        { error: createError.message || "Failed to create user" },
+        { error: result.error || "Failed to create user" },
         { status: 500 }
       );
     }
 
-    if (!newUser.user) {
+    // Fetch the created user to return it
+    const newProfile = getUserProfile(userId);
+
+    if (!newProfile) {
       return NextResponse.json(
-        { error: "User creation failed - no user returned" },
+        { error: "User created but profile not found" },
         { status: 500 }
       );
-    }
-
-    // Wait a moment for the trigger to create the profile
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Fetch the created profile to return it
-    const { data: newProfile, error: profileFetchError } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, role, is_active, created_at")
-      .eq("id", newUser.user.id)
-      .single();
-
-    if (profileFetchError) {
-      console.warn("Profile created but failed to fetch:", profileFetchError);
-      // Return basic user info even if profile fetch fails
-      return NextResponse.json({
-        user: {
-          id: newUser.user.id,
-          email: newUser.user.email,
-          role,
-        },
-      }, { status: 201 });
     }
 
     return NextResponse.json({ user: newProfile }, { status: 201 });

@@ -1,12 +1,17 @@
-// Script to restore member data from audit log
+// Script to restore member data to local SQLite database
 // Run with: npx tsx restore-members.ts
 
-import { createClient } from "@supabase/supabase-js"
+import Database from "better-sqlite3"
+import path from "path"
+import fs from "fs"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY! || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Initialize database
+const dataDir = path.join(process.cwd(), "data")
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true })
+}
 
-const supabase = createClient(supabaseUrl, supabaseKey)
+const db = new Database(path.join(dataDir, "app.db"))
 
 // Member data recovered from audit log
 const memberFromAuditLog = {
@@ -33,7 +38,7 @@ const memberFromAuditLog = {
   address: "",
   phone: "0721234569",
   email: "gheorghe.d@email.ro",
-  whatsapp_group_ids: [],
+  whatsapp_group_ids: null,
   organization_involvement: "",
   magazine_contributions: "",
   branch_needs: "",
@@ -87,35 +92,105 @@ async function restoreMembers() {
   try {
     // Insert the member from audit log
     console.log("Restoring member from audit log: M-001003 (Gheorghe Dumitrescu)")
-    const { error: error1 } = await supabase
-      .from("members")
-      .insert(memberFromAuditLog)
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO members (
+        id, member_code, status, rank, first_name, last_name, date_of_birth,
+        cnp, birthplace, unit, main_profile, retirement_year,
+        retirement_decision_number, retirement_file_number, branch_enrollment_year,
+        branch_withdrawal_year, branch_withdrawal_reason, withdrawal_reason,
+        withdrawal_year, provenance, address, phone, email, whatsapp_group_ids,
+        organization_involvement, magazine_contributions, branch_needs,
+        foundation_needs, other_needs, car_member_status, foundation_member_status,
+        foundation_role, has_current_workplace, current_workplace, other_observations
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
 
-    if (error1) {
-      console.error("Error restoring M-001003:", error1)
-    } else {
+    try {
+      insertStmt.run(
+        memberFromAuditLog.id,
+        memberFromAuditLog.member_code,
+        memberFromAuditLog.status,
+        memberFromAuditLog.rank,
+        memberFromAuditLog.first_name,
+        memberFromAuditLog.last_name,
+        memberFromAuditLog.date_of_birth,
+        memberFromAuditLog.cnp,
+        memberFromAuditLog.birthplace,
+        memberFromAuditLog.unit,
+        memberFromAuditLog.main_profile,
+        memberFromAuditLog.retirement_year,
+        memberFromAuditLog.retirement_decision_number,
+        memberFromAuditLog.retirement_file_number,
+        memberFromAuditLog.branch_enrollment_year,
+        memberFromAuditLog.branch_withdrawal_year,
+        memberFromAuditLog.branch_withdrawal_reason,
+        memberFromAuditLog.withdrawal_reason,
+        memberFromAuditLog.withdrawal_year,
+        memberFromAuditLog.provenance,
+        memberFromAuditLog.address,
+        memberFromAuditLog.phone,
+        memberFromAuditLog.email,
+        memberFromAuditLog.whatsapp_group_ids,
+        memberFromAuditLog.organization_involvement,
+        memberFromAuditLog.magazine_contributions,
+        memberFromAuditLog.branch_needs,
+        memberFromAuditLog.foundation_needs,
+        memberFromAuditLog.other_needs,
+        memberFromAuditLog.car_member_status,
+        memberFromAuditLog.foundation_member_status,
+        memberFromAuditLog.foundation_role,
+        memberFromAuditLog.has_current_workplace,
+        memberFromAuditLog.current_workplace,
+        memberFromAuditLog.other_observations
+      )
       console.log("✓ Successfully restored M-001003")
+    } catch (error) {
+      console.error("Error restoring M-001003:", error)
     }
 
     // Insert placeholder members
     console.log("\nCreating placeholder members for orphaned records...")
-    for (const member of placeholderMembers) {
-      const { error } = await supabase
-        .from("members")
-        .insert(member)
+    const placeholderStmt = db.prepare(`
+      INSERT OR REPLACE INTO members (id, member_code, status, rank, first_name, last_name, phone, email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
 
-      if (error) {
-        console.error(`Error creating placeholder ${member.member_code}:`, error)
-      } else {
+    for (const member of placeholderMembers) {
+      try {
+        placeholderStmt.run(
+          member.id,
+          member.member_code,
+          member.status,
+          member.rank,
+          member.first_name,
+          member.last_name,
+          member.phone,
+          member.email
+        )
         console.log(`✓ Created placeholder ${member.member_code}`)
+      } catch (error) {
+        console.error(`Error creating placeholder ${member.member_code}:`, error)
       }
     }
 
     // Verify restoration
-    const { data: members, error: countError } = await supabase
-      .from("members")
-      .select("member_code, first_name, last_name")
-      .order("member_code")
+    const members = db
+      .prepare("SELECT member_code, first_name, last_name FROM members ORDER BY member_code")
+      .all()
+
+    console.log(`\n✓ Restoration complete! Total members: ${members.length}`)
+    console.log("Members in database:")
+    members.forEach((m: any) => {
+      console.log(`  - ${m.member_code}: ${m.first_name} ${m.last_name}`)
+    })
+  } catch (error) {
+    console.error("Fatal error during restoration:", error)
+  } finally {
+    db.close()
+  }
+}
+
+restoreMembers()
 
     if (countError) {
       console.error("Error verifying restoration:", countError)

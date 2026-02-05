@@ -1,42 +1,75 @@
-import { createClient } from "@supabase/supabase-js";
+import { getDatabase } from "@/lib/db";
 
 /**
- * ADMIN CLIENT - Server-only Supabase client with service role key
- * 
- * WARNING: This client bypasses Row Level Security (RLS) policies.
- * Only use this in secure server-side contexts (API routes, server actions).
- * NEVER expose this client or the service role key to the browser.
- * 
- * Use cases:
- * - Creating new auth users via admin API
- * - Managing user roles and permissions
- * - Performing admin operations that require elevated privileges
+ * ADMIN CLIENT - Server-only database client
+ * Uses better-sqlite3 for direct database access
  */
 
-let adminClient: ReturnType<typeof createClient> | null = null;
+class AdminClient {
+  private db = getDatabase();
 
-export function getSupabaseAdmin() {
-  // Return existing client if already initialized
-  if (adminClient) {
-    return adminClient;
+  from(table: string) {
+    return {
+      select: (columns: string = "*") => ({
+        eq: (column: string, value: any) => ({
+          single: async () => {
+            try {
+              const result = this.db
+                .prepare(`SELECT ${columns} FROM ${table} WHERE ${column} = ?`)
+                .get(value);
+              return { data: result, error: null };
+            } catch (error: any) {
+              return { data: null, error: error.message };
+            }
+          },
+        }),
+      }),
+      order: (column: string, options?: { ascending: boolean }) => ({
+        all: async () => {
+          try {
+            const order = options?.ascending !== false ? "ASC" : "DESC";
+            const result = this.db
+              .prepare(
+                `SELECT ${columns} FROM ${table} ORDER BY ${column} ${order}`
+              )
+              .all();
+            return { data: result, error: null };
+          } catch (error: any) {
+            return { data: null, error: error.message };
+          }
+        },
+      }),
+    };
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    throw new Error(
-      "Missing Supabase environment variables. Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set."
-    );
-  }
-
-  adminClient = createClient(url, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
+  auth = {
+    admin: {
+      createUser: async (userData: {
+        email: string;
+        password: string;
+        user_metadata?: Record<string, any>;
+      }) => {
+        // This would require actual user creation - handled by API routes
+        return {};
+      },
+      listUsers: async () => {
+        try {
+          const users = this.db.prepare("SELECT * FROM profiles").all();
+          return { data: users, error: null };
+        } catch (error: any) {
+          return { data: null, error: error.message };
+        }
+      },
     },
-  });
+  };
+}
 
+let adminClient: AdminClient | null = null;
+
+export function getSupabaseAdmin(): AdminClient {
+  if (!adminClient) {
+    adminClient = new AdminClient();
+  }
   return adminClient;
 }
 
