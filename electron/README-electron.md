@@ -14,7 +14,7 @@ Do this **on a Windows machine** to produce a Windows installer (standalone app)
    cd zet-asociatie
    npm install --legacy-peer-deps
    ```
-3. **Next.js standalone build:**
+3. **Next.js standalone build** (this also copies `.next/static` and `public` into `.next/standalone` so the app can serve JS/CSS/fonts):
    ```bash
    npm run build
    ```
@@ -38,6 +38,20 @@ If the app starts and then closes immediately, a **debug log** is written to a t
 - **macOS:** `~/Library/Application Support/Zet Asociatie/debug.log`
 
 Open the file in Notepad (or any text editor). The first line shows the log file path; the rest are timestamped entries (startup, Postgres setup, Next server, and any **ERROR** or **uncaughtException** / **unhandledRejection**). Use the last lines to see why the app exited.
+
+### 404 for `/_next/static/*` (blank screen, missing JS/CSS/fonts)
+
+If the app window is blank and the browser/DevTools show **404** for `/_next/static/chunks/*.js`, `/_next/static/css/*.css`, or font files, the standalone build was missing static assets. Next.js does not copy `.next/static` or `public` into `.next/standalone` by default.
+
+**Fix:** Ensure you run a full build before packaging. The project’s `npm run build` now runs `scripts/copy-standalone-static.js` after `next build`, which copies `.next/static` and `public` into `.next/standalone`. Then run `npm run electron:build` (or `electron:pack`). If you had run `next build` before this fix, run **`npm run build`** again (so the copy step runs), then rebuild the Electron app.
+
+### Blank screen / How to register the first admin user
+
+If the app window stays blank, the Next.js server may still be starting. The app now waits for the server and then opens the **login** page; on first run you are redirected to **Setup** to create the first admin (email + password).
+
+- **Wait and refresh:** Give it 10–15 seconds, then press **Ctrl+R** (Windows) or **Cmd+R** (Mac) to reload the window. You should see either the **Login** or **Setup** page.
+- **Use a browser:** With the app running, open a browser and go to **http://localhost:3000/setup** (or **http://localhost:3000/login**). Create the admin account on the setup page, then you can use the app window or the browser to log in.
+- **Direct setup URL:** If the app window never shows content, use the browser method above to register; after that, the app window should work on next launch.
 
 ### First-run Postgres install (packaged app)
 

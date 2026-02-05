@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const http = require("node:http");
 const { spawn } = require("node:child_process");
 const { ensurePostgresSetup, getConfigPath, loadExistingConfig } = require("./postgres-setup");
 const debugLog = require("./debug-log");
@@ -8,6 +9,12 @@ const debugLog = require("./debug-log");
 const NEXT_DEV_URL = process.env.NEXT_APP_URL || "http://localhost:3000";
 const NEXT_PROD_PORT = process.env.PORT || 3000;
 const DEFAULT_PG_PORT = 5432;
+
+/** Base URL for the app (no trailing slash). Load /login so user sees login/setup first. */
+function getAppBaseUrl() {
+  return isDev ? NEXT_DEV_URL : `http://127.0.0.1:${NEXT_PROD_PORT}`;
+}
+const LOGIN_PATH = "/login";
 
 let nextServerProcess = null;
 let postgresProcess = null;
@@ -58,6 +65,7 @@ function createMainWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -66,11 +74,42 @@ function createMainWindow() {
     },
   });
 
-  const urlToLoad = isDev
-    ? NEXT_DEV_URL
-    : `http://localhost:${NEXT_PROD_PORT}`;
-
+  const baseUrl = getAppBaseUrl();
+  const urlToLoad = `${baseUrl}${LOGIN_PATH}`;
   win.loadURL(urlToLoad);
+  win.once("ready-to-show", () => win.show());
+}
+
+/** Wait for the Next server to respond (packaged app). Returns a promise that resolves when ready or after maxAttempts. */
+function waitForServerReady() {
+  if (isDev) return Promise.resolve();
+  const port = parseInt(NEXT_PROD_PORT, 10);
+  const maxAttempts = 40;
+  const intervalMs = 500;
+  return new Promise((resolve) => {
+    let attempts = 0;
+    function tryRequest() {
+      attempts++;
+      const req = http.get(`http://127.0.0.1:${port}${LOGIN_PATH}`, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on("error", () => {
+        if (attempts >= maxAttempts) {
+          debugLog.info("Server wait timed out; opening window anyway.");
+          resolve();
+        } else {
+          setTimeout(tryRequest, intervalMs);
+        }
+      });
+      req.setTimeout(2000, () => {
+        req.destroy();
+        if (attempts >= maxAttempts) resolve();
+        else setTimeout(tryRequest, intervalMs);
+      });
+    }
+    setTimeout(tryRequest, 300);
+  });
 }
 
 function startPostgresIfConfigured(postgresBin, postgresDataDir, port) {
@@ -194,6 +233,8 @@ app.whenReady().then(async () => {
     }
 
     startNextStandaloneServer();
+    debugLog.info("Waiting for Next server...");
+    await waitForServerReady();
     debugLog.info("Creating main window...");
     createMainWindow();
     debugLog.info("Main window created.");
