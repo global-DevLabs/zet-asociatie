@@ -92,7 +92,7 @@ export default function DashboardPage() {
     // Filter payments for the selected year with status "Plătită"
     const yearPayments = allPayments.filter((p) => {
       // Use contributionYear if available, otherwise extract year from payment date
-      const paymentYear = p.contributionYear || new Date(p.date).getFullYear()
+      const paymentYear = p.contributionYear || (p.date ? parseInt(p.date.slice(0, 4), 10) : 0)
       // Only count "Plătită" status payments
       return paymentYear === year && p.status === "Plătită"
     })
@@ -112,7 +112,7 @@ export default function DashboardPage() {
   const currentYearPayingMembers = useMemo(() => {
     const uniqueMembers = new Set<string>()
     allPayments.forEach((p) => {
-      const paymentYear = p.contributionYear || new Date(p.date).getFullYear()
+      const paymentYear = p.contributionYear || (p.date ? parseInt(p.date.slice(0, 4), 10) : 0)
       if (paymentYear === currentYear && p.status === "Plătită") {
         uniqueMembers.add(p.memberId)
       }
@@ -130,7 +130,7 @@ export default function DashboardPage() {
 
   const totalCollections = allPayments
     .filter((p) => {
-      const paymentYear = p.contributionYear || new Date(p.date).getFullYear()
+      const paymentYear = p.contributionYear || (p.date ? parseInt(p.date.slice(0, 4), 10) : 0)
       return paymentYear === currentYear && p.status === "Plătită"
     })
     .reduce((sum, p) => sum + p.amount, 0)
@@ -151,7 +151,12 @@ export default function DashboardPage() {
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
   const recentPayments = allPayments
-    .filter((p) => new Date(p.date) >= thirtyDaysAgo && p.status === "Plătită")
+    .filter((p) => {
+      if (!p.date || p.date.length < 10) return false
+      const [y, m, d] = p.date.slice(0, 10).split("-").map(Number)
+      const paymentDate = new Date(y, m - 1, d)
+      return paymentDate >= thirtyDaysAgo && p.status === "Plătită"
+    })
     .reduce((sum, p) => sum + p.amount, 0)
 
   // Generate list of years for the selector

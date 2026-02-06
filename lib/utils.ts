@@ -65,7 +65,7 @@ export function displayDateToISO(displayDate: string): string {
     return ""
   }
 
-  const cleaned = displayDate.replace(/\s/g, "")
+  const cleaned = displayDate.replace(/\s/g, "").replace(/[/-]/g, ".")
   const parts = cleaned.split(".")
 
   if (parts.length !== 3) {
@@ -84,7 +84,7 @@ export function displayDateToISO(displayDate: string): string {
 }
 
 /**
- * Convert ISO YYYY-MM-DD to DD.MM.YYYY
+ * Convert ISO YYYY-MM-DD to DD.MM.YYYY (parse as local date to avoid timezone shift)
  * @param isoDate - ISO date string
  * @returns Date in DD.MM.YYYY format or empty string if invalid
  */
@@ -93,24 +93,29 @@ export function isoDateToDisplay(isoDate: string): string {
     return ""
   }
 
-  try {
-    const date = new Date(isoDate)
-    if (isNaN(date.getTime())) {
-      return ""
-    }
-
-    const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
-    const year = date.getFullYear()
-
-    return `${day}.${month}.${year}`
-  } catch {
+  const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) {
     return ""
   }
+
+  const [, y, m, d] = match
+  const year = parseInt(y!, 10)
+  const month = parseInt(m!, 10)
+  const day = parseInt(d!, 10)
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return ""
+  }
+
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
+    return ""
+  }
+
+  return `${String(day).padStart(2, "0")}.${String(month).padStart(2, "0")}.${year}`
 }
 
 /**
- * Validate a date string in DD.MM.YYYY format
+ * Validate a date string in DD.MM.YYYY format (parse as local date to avoid timezone issues)
  * @param displayDate - Date in DD.MM.YYYY format
  * @returns true if valid, false otherwise
  */
@@ -119,18 +124,28 @@ export function isValidDisplayDate(displayDate: string): boolean {
     return false
   }
 
-  const isoDate = displayDateToISO(displayDate)
-  if (!isoDate) {
+  const cleaned = displayDate.replace(/\s/g, "").replace(/[/-]/g, ".")
+  const parts = cleaned.split(".")
+  if (parts.length !== 3) {
     return false
   }
 
-  const date = new Date(isoDate)
+  const day = parseInt(parts[0], 10)
+  const month = parseInt(parts[1], 10)
+  const year = parseInt(parts[2], 10)
+
+  if (isNaN(day) || isNaN(month) || isNaN(year) || year < 1000 || year > 9999) {
+    return false
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false
+  }
+
+  const date = new Date(year, month - 1, day)
   if (isNaN(date.getTime())) {
     return false
   }
 
-  // Check if the date components match (prevents invalid dates like 32.13.2025)
-  const [day, month, year] = displayDate.split(".").map(Number)
   return date.getDate() === day && date.getMonth() + 1 === month && date.getFullYear() === year
 }
 

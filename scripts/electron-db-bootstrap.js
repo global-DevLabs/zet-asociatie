@@ -136,11 +136,13 @@ async function runBootstrap(options) {
 
   const jwtSecret = generateSecret();
   const encryptionSalt = generateSecret();
-  const noPasswordUrl = `postgres://postgres@127.0.0.1:${port}/postgres`;
-
+  // Use explicit config so pg always gets password as string (avoids SCRAM "client password must be a string").
   const { Client } = require("pg");
   const client = new Client({
-    connectionString: noPasswordUrl,
+    host: "127.0.0.1",
+    port: parseInt(port, 10),
+    user: "postgres",
+    database: "postgres",
     password: "",
   });
   try {
@@ -159,10 +161,12 @@ async function runBootstrap(options) {
   const { appUrl } = result;
   try { await client.end(); } catch (_) {}
 
-  // Connect to app DB as postgres to grant privileges and create extension
-  const adminAppDbUrl = `postgres://postgres@127.0.0.1:${port}/${dbName}`;
+  // Connect to app DB as postgres to grant privileges and create extension (explicit config, password string)
   const clientAppDb = new Client({
-    connectionString: adminAppDbUrl,
+    host: "127.0.0.1",
+    port: parseInt(port, 10),
+    user: "postgres",
+    database: dbName,
     password: "",
   });
   try {
@@ -266,26 +270,27 @@ async function runExternalBootstrap(options) {
   const jwtSecret = options.jwtSecret || process.env.JWT_SECRET || generateSecret();
   const encryptionSalt = options.encryptionSalt || process.env.ENCRYPTION_SALT || generateSecret();
 
-  let defaultDbUrl;
+  let host = "127.0.0.1";
+  let port = "5432";
+  let user = "postgres";
+  let password = "";
   try {
     const u = new URL(connectionUrl);
-    u.pathname = "/postgres";
-    defaultDbUrl = u.toString();
-  } catch {
-    defaultDbUrl = connectionUrl.replace(/\/[^/]*$/, "/postgres");
-  }
-
-  const port = (() => {
-    try {
-      const u = new URL(connectionUrl);
-      return u.port || "5432";
-    } catch {
-      return "5432";
-    }
-  })();
+    host = u.hostname || host;
+    port = u.port || port;
+    user = decodeURIComponent(u.username || user);
+    password = u.password ? decodeURIComponent(u.password) : "";
+    if (typeof password !== "string") password = "";
+  } catch (_) {}
 
   const { Client } = require("pg");
-  const client = new Client({ connectionString: defaultDbUrl });
+  const client = new Client({
+    host,
+    port: parseInt(port, 10),
+    user,
+    database: "postgres",
+    password,
+  });
   try {
     await client.connect();
   } catch (err) {
@@ -302,8 +307,13 @@ async function runExternalBootstrap(options) {
   const { appUrl } = result;
   try { await client.end(); } catch (_) {}
 
-  const adminAppDbUrl = defaultDbUrl.replace(/\/postgres$/, "/" + dbName);
-  const clientAppDb = new Client({ connectionString: adminAppDbUrl });
+  const clientAppDb = new Client({
+    host,
+    port: parseInt(port, 10),
+    user,
+    database: dbName,
+    password,
+  });
   try {
     await clientAppDb.connect();
   } catch (err) {

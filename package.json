@@ -1,6 +1,6 @@
 {
   "name": "zet_asociatie",
-  "version": "0.1.15",
+  "version": "0.1.18",
   "description": "Aplicatie de administrare membri",
   "author": "Zet Securty",
   "private": true,
@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "start": "next start",
     "migrate:local": "node scripts/migrate.js",
+    "migrate:check": "node scripts/check-migrations.js",
     "verify:windows-env": "node scripts/verify-windows-env.js",
     "electron:dev": "electron ./electron/main.js",
     "version:bump": "npm version patch --no-git-tag-version",
@@ -127,15 +128,20 @@
     ],
     "extraResources": [
       {
-        "from": "resources/postgres-win",
-        "to": "postgres-win",
-        "filter": [
-          "**/*"
-        ]
+        "from": "resources/Postgres",
+        "to": "Postgres",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "resources/RebuilderC",
+        "to": "RebuilderC",
+        "filter": ["**/*"]
       }
     ],
     "asarUnpack": [
       ".next/standalone/**",
+      "db/**",
+      "scripts/**",
       "node_modules/pg/**",
       "node_modules/pg-types/**",
       "node_modules/postgres-array/**",

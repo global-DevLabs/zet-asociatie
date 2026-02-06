@@ -2,6 +2,19 @@
 
 Management membri – local PostgreSQL and JWT auth (no Supabase).
 
+## Fresh install (summary)
+
+For a **new machine or empty database**:
+
+1. **Database** – Create an empty database (e.g. `createdb zet_asociatie`) or use the Electron packaged app with bundled Postgres (it creates the DB on first launch).
+2. **Migrations** – Run once so tables exist:
+   - **Dev:** `node scripts/generate-env.js` then `npm run migrate:local` (uses `LOCAL_DB_URL` from `.env.local`).
+   - **Electron:** Migrations run automatically on first launch (0001–0006 on an empty DB).
+3. **First user** – Open the app → you’ll be sent to **Setup** or **Login**. Register the first account (it becomes admin). No seed data required.
+
+Schema reference: `db/schema.sql`. Check migration files: `npm run migrate:check`.  
+Step-by-step: **`docs/FRESH_INSTALL_CHECKLIST.md`**.
+
 ## Running with local Postgres
 
 The app uses a **local PostgreSQL** database and **JWT-based auth** (no Supabase). You need a running Postgres instance and env credentials.
@@ -63,7 +76,7 @@ Or:
 node scripts/migrate.js
 ```
 
-Migrations read `LOCAL_DB_URL` from `.env.local` if the file exists.
+Migrations read `LOCAL_DB_URL` from `.env.local` if the file exists. They apply `db/migrations/0001_*.sql` through `0006_*.sql`. The full target schema is documented in `db/schema.sql`.
 
 ### 4. Install dependencies and start the app
 

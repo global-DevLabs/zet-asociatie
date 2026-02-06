@@ -1,4 +1,5 @@
 import type { Activity, ActivityParticipant } from "@/types"
+import { isoDateToDisplay } from "./utils"
 import { format as formatDate, parse } from "date-fns"
 
 // Export activities to CSV
@@ -12,7 +13,7 @@ export function exportActivitiesToCSV(
   const rows = activities.map((activity) => {
     const participants = getParticipants(activity.id)
     const typeName = getTypeName(activity.type_id)
-    const dateFormatted = formatDate(new Date(activity.date_from), "dd.MM.yyyy")
+    const dateFormatted = isoDateToDisplay(activity.date_from)
 
     return [
       activity.id,
@@ -65,7 +66,7 @@ export function exportActivitiesWithParticipantsToCSV(
   for (const activity of activities) {
     const participants = getParticipants(activity.id)
     const typeName = getTypeName(activity.type_id)
-    const dateFormatted = formatDate(new Date(activity.date_from), "dd.MM.yyyy")
+    const dateFormatted = isoDateToDisplay(activity.date_from)
 
     if (participants.length === 0) {
       // Include activity even if no participants

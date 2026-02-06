@@ -47,7 +47,10 @@ export function ActivitiesTable({ activities }: ActivitiesTableProps) {
 
   const formatDate = (dateString: string) => {
     try {
-      return formatDateFns(new Date(dateString), "dd MMM yyyy", { locale: ro })
+      const m = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (!m) return dateString
+      const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10))
+      return formatDateFns(d, "dd MMM yyyy", { locale: ro })
     } catch {
       return dateString
     }

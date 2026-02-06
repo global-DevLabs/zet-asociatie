@@ -223,7 +223,7 @@ export function QuickCashinModal() {
       await createPayment({
         memberId: selectedMemberId,
         date: formData.date,
-        year: new Date(formData.date).getFullYear(),
+        year: formData.date ? parseInt(formData.date.slice(0, 4), 10) : new Date().getFullYear(),
         paymentType: formData.paymentType as PaymentType,
         contributionYear,
         amount,

@@ -1,5 +1,5 @@
 import type { Member } from "@/types"
-import { calculateAge, displayMemberCode } from "./utils"
+import { calculateAge, displayMemberCode, isoDateToDisplay } from "./utils"
 import { format as formatDate } from "date-fns"
 
 export type ExportFormat = "csv" | "xlsx"
@@ -82,7 +82,7 @@ export function generateCSV(
         } else if (field.key === "unit" && member.unit) {
           value = getUnitDisplay(member.unit)
         } else if (field.key === "dateOfBirth" && member.dateOfBirth) {
-          value = formatDate(new Date(member.dateOfBirth), "dd.MM.yyyy")
+          value = isoDateToDisplay(member.dateOfBirth)
         } else {
           value = member[field.key as keyof Member] || ""
         }

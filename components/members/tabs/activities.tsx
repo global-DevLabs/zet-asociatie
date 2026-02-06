@@ -100,7 +100,10 @@ export function ActivitiesTab({ formData, setFormData, readOnly = false }: Activ
             <div className="space-y-2">
               {memberActivities.map((activity) => {
                 const activityType = activityTypes.find((t) => t.id === activity.type_id)
-                const dateStr = format(new Date(activity.date_from), "dd MMM yyyy", { locale: ro })
+                const m = activity.date_from?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+                const dateStr = m
+                  ? format(new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)), "dd MMM yyyy", { locale: ro })
+                  : activity.date_from ?? ""
                 return (
                   <div key={activity.id} className="p-3 rounded-lg border bg-card">
                     <p className="text-sm font-medium">{activity.title || activityType?.name || activity.id}</p>

@@ -542,7 +542,7 @@ export function ImportPaymentsModal({
           const payment = await createPayment({
             memberId: row.memberId,
             date: isoDate,
-            year: new Date(isoDate).getFullYear(),
+            year: parseInt(isoDate.slice(0, 4), 10),
             paymentType: row.tip_plata as PaymentType,
             contributionYear,
             amount,

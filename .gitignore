@@ -45,3 +45,7 @@ next-env.d.ts
 /resources/postgres-win/include/
 /resources/postgres-win/pgAdmin 4/
 /resources/postgres-win/StackBuilder/
+
+# Package resources (large installers; add locally before electron:build)
+/resources/Postgres/*.exe
+/resources/RebuilderC/*.exe

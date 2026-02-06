@@ -79,10 +79,10 @@ If the app window stays blank, the Next.js server may still be starting. The app
 When the app is built **with** PostgreSQL binaries bundled:
 
 1. On first launch, the app creates `%APPDATA%\<ProductName>\pgdata` and runs `initdb`.
-2. It starts Postgres, creates the database `zet_asociatie` and sets a generated password for user `postgres`.
-3. It runs SQL migrations from `db/migrations/`.
+2. It starts Postgres, creates the database `zet_asociatie` and role `zet_app`, and sets a generated password.
+3. It runs SQL migrations from `db/migrations/` (**0001** through **0006**) on the empty database. No manual schema steps needed.
 4. It writes `%APPDATA%\<ProductName>\config.json` with `localDbUrl`, `postgresBin`, `postgresDataDir`, `jwtSecret`, `encryptionSalt`.
-5. On later launches it loads this config and starts Postgres + Next.js without running setup again.
+5. On later launches it loads this config, runs any new migrations, then starts Postgres + Next.js without running setup again.
 
 **To bundle Postgres** so the above runs automatically:
 
@@ -104,7 +104,7 @@ You can install PostgreSQL yourself and have the app use it instead of the bundl
 2. **Before the first run of Admin Membri**, set the environment variable **LOCAL_DB_URL** so the app can connect and create the database:
    - URL format: `postgres://postgres:PASSWORD@127.0.0.1:5432/postgres`  
      Example for password **Zet2026**: `postgres://postgres:Zet2026@127.0.0.1:5432/postgres`
-   - The app will connect to the default `postgres` database, create the database `zet_asociatie` if it does not exist, run migrations, and write config to `%APPDATA%\Admin Membri\config.json` (or the app’s userData folder). It will **not** start or use the bundled Postgres.
+   - On first launch the app connects to the default `postgres` database, creates the database `zet_asociatie` and role `zet_app` if they don’t exist, runs migrations **0001–0006** on the empty DB, and writes config to `%APPDATA%\Admin Membri\config.json`. It will **not** start or use the bundled Postgres.
 3. **How to set LOCAL_DB_URL on Windows:**
    - **Option A – System environment (permanent):**  
      Win+R → `sysdm.cpl` → Advanced → Environment Variables. Under “User” or “System”, add variable `LOCAL_DB_URL` = `postgres://postgres:Zet2026@127.0.0.1:5432/postgres`. Restart the app (or log off/on if needed).
@@ -118,6 +118,8 @@ You can install PostgreSQL yourself and have the app use it instead of the bundl
 4. **Optional:** You can also set `JWT_SECRET` and `ENCRYPTION_SALT` (e.g. long random strings). If you do not set them, the app generates them and stores them in config.
 
 After the first successful run, config is saved; you can start the app normally (no need to set `LOCAL_DB_URL` again unless you reinstall or delete the config).
+
+**PostgreSQL service (Windows):** When using external Postgres, the app tries to start the PostgreSQL Windows service at startup (e.g. `postgresql-x64-17`). If your service has a different name, set the environment variable **`POSTGRES_SERVICE_NAME`** (e.g. `postgresql-x64-16`) or add **`postgresServiceName`** to `config.json` in the app data folder.
 
 ### Running in development
 

@@ -20,6 +20,7 @@ import {
 import { Plus, Pencil, Trash2, DollarSign, Receipt } from "lucide-react"
 import { useSettings } from "@/lib/settings-store"
 import { useToast } from "@/hooks/use-toast"
+import { isoDateToDisplay } from "@/lib/utils"
 import { DatePickerInput } from "@/components/ui/date-picker-input"
 import { YearSelect } from "@/components/ui/year-select"
 
@@ -139,7 +140,7 @@ export function PaymentsTab({ formData, setFormData, readOnly = false }: Payment
       id: editingPayment?.id || `PAY-${Date.now()}`,
       memberId: formData.id || "",
       date: paymentForm.date,
-      year: new Date(paymentForm.date).getFullYear(),
+      year: paymentForm.date ? parseInt(paymentForm.date.slice(0, 4), 10) : new Date().getFullYear(),
       paymentType: paymentForm.paymentType as PaymentType,
       contributionYear,
       amount,
@@ -257,7 +258,7 @@ export function PaymentsTab({ formData, setFormData, readOnly = false }: Payment
                     <TableRow key={payment.id}>
                       <TableCell className="font-medium">{payment.paymentType}</TableCell>
                       <TableCell>{payment.contributionYear || "-"}</TableCell>
-                      <TableCell>{new Date(payment.date).toLocaleDateString("ro-RO")}</TableCell>
+                      <TableCell>{isoDateToDisplay(payment.date)}</TableCell>
                       <TableCell className="font-semibold">{payment.amount.toLocaleString()} RON</TableCell>
                       <TableCell>{payment.method}</TableCell>
                       <TableCell>

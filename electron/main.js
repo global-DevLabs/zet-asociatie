@@ -3,8 +3,10 @@ const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const debugLog = require("./debug-log");
+
+const DATA_FOLDER_NAME = "Admin Membri";
 
 // Create debug.log as early as possible (before app.whenReady), so crashes are logged.
 // Uses %APPDATA%\Admin Membri\ on Windows when app is not yet ready.
@@ -25,6 +27,7 @@ const LOGIN_PATH = "/login";
 
 let nextServerProcess = null;
 let postgresProcess = null;
+let mainWindow = null;
 /** When true, Postgres was started via scheduled task (admin account); stop via killPostgresOnPort(port). */
 let postgresStartedViaTask = false;
 let postgresPort = DEFAULT_PG_PORT;
@@ -73,6 +76,42 @@ function getPostgresConfig() {
   };
 }
 
+const COMMON_PG_SERVICE_NAMES = [
+  "postgresql-x64-17",
+  "postgresql-x64-16",
+  "postgresql-x64-15",
+  "PostgreSQL 17",
+  "PostgreSQL 16",
+  "PostgreSQL 15",
+];
+
+/**
+ * On Windows, try to start the PostgreSQL service when using external Postgres (LOCAL_DB_URL).
+ * Service name from config.postgresServiceName, env POSTGRES_SERVICE_NAME, or try common names.
+ * Runs "net start <serviceName>"; if the service is already running, net start returns 0.
+ */
+function tryStartPostgresServiceWindows(config) {
+  if (process.platform !== "win32" || !config?.localDbUrl) return;
+  const explicit =
+    config.postgresServiceName || process.env.POSTGRES_SERVICE_NAME || "";
+  const names = explicit ? [explicit] : COMMON_PG_SERVICE_NAMES;
+  for (const name of names) {
+    const r = spawnSync("net", ["start", name], {
+      stdio: "pipe",
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (r.status === 0) {
+      debugLog.info("[MAIN] PostgreSQL service started or already running: " + name);
+      return;
+    }
+    const err = (r.stderr || r.stdout || "").trim();
+    if (err && !/already started|running|no such service|specified service does not exist/i.test(err)) {
+      debugLog.verbose("[MAIN] Could not start service '" + name + "': " + err);
+    }
+  }
+}
+
 function createMainWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -84,6 +123,10 @@ function createMainWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
     },
+  });
+  mainWindow = win;
+  win.on("closed", () => {
+    mainWindow = null;
   });
 
   const baseUrl = getAppBaseUrl();
@@ -184,6 +227,46 @@ function stopPostgresIfRunning() {
   }
 }
 
+/** Ensure userData path uses the app display name (Admin Membri), not package.json "name". */
+function ensureUserDataPath() {
+  const appData = app.getPath("appData");
+  const desired = path.join(appData, DATA_FOLDER_NAME);
+  app.setPath("userData", desired);
+}
+
+/** Run DB migrations so tables exist. Call when we have config with localDbUrl, before starting Next. */
+function runMigrationsSync(config) {
+  if (!config?.localDbUrl) return;
+  let appRoot = app.isPackaged ? app.getAppPath() : process.cwd();
+  if (app.isPackaged && appRoot.includes("app.asar")) {
+    appRoot = appRoot.replace("app.asar", "app.asar.unpacked");
+  }
+  const migrateScript = path.join(appRoot, "scripts", "migrate.js");
+  if (!fs.existsSync(migrateScript)) {
+    debugLog.verbose("[MAIN] No migrate script at " + migrateScript + "; skipping migrations.");
+    return;
+  }
+  debugLog.info("[MAIN] Running database migrations...");
+  // Packaged app: process.execPath is the Electron .exe; must run as Node so the script runs.
+  const migrateEnv = {
+    ...process.env,
+    LOCAL_DB_URL: config.localDbUrl,
+    USE_LOCAL_DB: "true",
+  };
+  if (app.isPackaged) migrateEnv.ELECTRON_RUN_AS_NODE = "1";
+  const result = spawnSync(process.execPath, [migrateScript], {
+    cwd: appRoot,
+    env: migrateEnv,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+  if (result.status === 0) {
+    debugLog.info("[MAIN] Migrations completed.");
+  } else {
+    debugLog.error("[MAIN] Migrations failed (exit " + (result.status ?? "?") + "): " + (result.stderr || result.stdout || "").trim());
+  }
+}
+
 /**
  * @param {Record<string,string>|null} configOverride - If provided (e.g. from ensurePostgresSetup), use this for env so the Next server always gets DB/JWT config.
  */
@@ -260,8 +343,22 @@ function stopNextStandaloneServer() {
   }
 }
 
+// Single instance: prevent second launch from starting another process; focus existing window instead.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 app.whenReady().then(async () => {
-  debugLog.init(app); // set appRef so future logs use app.getPath("userData")
+  debugLog.init(app);
+  ensureUserDataPath();
   debugLog.info(`App ready. isPackaged=${app.isPackaged} isDev=${isDev}`);
   debugLog.info(`Debug log file: ${debugLog.getLogPath()}`);
 
@@ -284,6 +381,7 @@ app.whenReady().then(async () => {
       } else {
         debugLog.info("[MAIN] Setup: Postgres setup — skipped or failed (no config).");
         if (getLastSetupFailure() === "admin_refused") {
+          debugLog.info("[MAIN] Showing dialog: PostgreSQL cannot run as Administrator.");
           await dialog.showMessageBox({
             type: "error",
             title: "Database setup failed",
@@ -291,7 +389,8 @@ app.whenReady().then(async () => {
             detail:
               "The bundled database refuses to run when the app is started with administrative permissions.\n\n" +
               "• Do not right-click the app and choose \"Run as administrator\".\n" +
-              "• If you are logged in as the built-in Administrator account, create a standard user account and run Admin Membri from there, or install PostgreSQL separately and set LOCAL_DB_URL in the app config.",
+              "• If you are logged in as the built-in Administrator account, create a standard user account and run Admin Membri from there.\n\n" +
+              "Alternative: Install PostgreSQL yourself (e.g. from postgresql.org), then set the environment variable LOCAL_DB_URL before starting the app (e.g. postgres://postgres:YourPassword@127.0.0.1:5432/postgres). The app will then use your PostgreSQL instead of the bundled one.",
           });
         }
       }
@@ -300,6 +399,16 @@ app.whenReady().then(async () => {
       debugLog.verbose("[MAIN] Setup: Skipped (dev or unpackaged). Using existing config or env.");
       const pg = getPostgresConfig();
       await startPostgresIfConfigured(pg.postgresBin, pg.postgresDataDir, pg.port, pg.startPostgresViaTask);
+    }
+
+    const configForNext = nextConfig || loadConfig();
+    if (configForNext?.localDbUrl && !isDev) {
+      // When using external Postgres on Windows, try to start the PostgreSQL service so the app can connect
+      if (process.platform === "win32" && !configForNext.postgresBin) {
+        tryStartPostgresServiceWindows(configForNext);
+        await new Promise((r) => setTimeout(r, 2000)); // give the service a moment to accept connections
+      }
+      runMigrationsSync(configForNext);
     }
 
     if (!isDev) {

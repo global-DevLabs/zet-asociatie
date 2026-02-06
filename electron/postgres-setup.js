@@ -394,7 +394,7 @@ async function ensurePostgresSetup(app) {
   }
 
   let postgresProcess = null;
-  let pgPort = PG_PORT_DEFAULT;
+  let pgPort = null; // Set only when our Postgres actually becomes ready (don't assume 5432 if task failed)
   let stderrRef = { getStderr: () => "" };
 
   for (const tryPort of [PG_PORT_DEFAULT, PG_PORT_ALT]) {
@@ -469,10 +469,48 @@ async function ensurePostgresSetup(app) {
     }
   }
 
+  // When task failed (e.g. "No mapping between account names and security IDs" on built-in Administrator), try direct spawn once
+  if (useTaskForPostgres && !pgPort) {
+    debugLog.info("[SETUP] Task could not start Postgres; trying direct spawn (may fail if running as Administrator).");
+    for (const tryPort of [PG_PORT_DEFAULT, PG_PORT_ALT]) {
+      if (postgresProcess) {
+        postgresProcess.kill();
+        postgresProcess = null;
+        if (fs.existsSync(postmasterPid)) {
+          try { fs.unlinkSync(postmasterPid); } catch (_) {}
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      postgresProcess = spawnPostgres(tryPort);
+      stderrRef = attachPostgresLogging(postgresProcess, tryPort);
+      const exitedEarly = await waitForEarlyExit(postgresProcess, stderrRef, tryPort);
+      if (exitedEarly) {
+        const errText = stderrRef.getStderr();
+        if (errText && /administrative permissions|unprivileged user/i.test(errText)) lastSetupFailure = "admin_refused";
+        postgresProcess = null;
+        if (tryPort === PG_PORT_DEFAULT) continue;
+        break;
+      }
+      const ready = await waitForPostgresTcp(tryPort);
+      if (ready) {
+        pgPort = tryPort;
+        useTaskForPostgres = false;
+        break;
+      }
+      postgresProcess.kill();
+      postgresProcess = null;
+      if (tryPort === PG_PORT_DEFAULT) debugLog.info("[SETUP] Retrying direct spawn on port " + PG_PORT_ALT + "...");
+    }
+  }
+
+  if (!pgPort) {
+    debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready on 5432 or 5433 (task start or spawn).");
+    return null;
+  }
   const tcpReady = await waitForPostgresTcp(pgPort);
   if (useTaskForPostgres) {
-    if (!pgPort || !tcpReady) {
-      debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready on 5432 or 5433 (task start).");
+    if (!tcpReady) {
+      debugLog.error("[SETUP] Step: PostgreSQL server — did not become ready on port " + pgPort + " (task start).");
       return null;
     }
   } else {
@@ -490,7 +528,11 @@ async function ensurePostgresSetup(app) {
   debugLog.verbose("[SETUP] Waiting 3s for Postgres to finish startup...");
   await new Promise((r) => setTimeout(r, 3000));
 
-  const appRoot = app.getAppPath ? app.getAppPath() : process.cwd();
+  let appRoot = app.getAppPath ? app.getAppPath() : process.cwd();
+  if (app.isPackaged && appRoot && appRoot.includes("app.asar")) {
+    appRoot = appRoot.replace("app.asar", "app.asar.unpacked");
+    debugLog.verbose("[SETUP] Using unpacked app path for bootstrap: " + appRoot);
+  }
   debugLog.info("[SETUP] Step: Loading bootstrap script...");
   let runBootstrap;
   try {

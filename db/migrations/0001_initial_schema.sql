@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   created_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid
 );
+-- Case-insensitive unique email: 0006_schema_improvements.sql adds profiles_email_lower_key.
 
 CREATE TABLE IF NOT EXISTS members (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

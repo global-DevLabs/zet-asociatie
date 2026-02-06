@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { Payment, PaymentStatus } from "@/types"
+import { isoDateToDisplay } from "@/lib/utils"
 import { useMembers } from "@/lib/members-store"
 import { usePayments } from "@/lib/payments-store"
 import { useAuth } from "@/lib/auth-context"
@@ -171,7 +172,7 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
                     <TableCell className="font-medium">
                       {payment.member ? `${payment.member.firstName} ${payment.member.lastName}` : "Neasociat"}
                     </TableCell>
-                    <TableCell>{new Date(payment.date).toLocaleDateString("ro-RO")}</TableCell>
+                    <TableCell>{isoDateToDisplay(payment.date)}</TableCell>
                     <TableCell>{payment.contributionYear || "-"}</TableCell>
                     <TableCell>
                       <span className="text-sm">{payment.paymentType}</span>
