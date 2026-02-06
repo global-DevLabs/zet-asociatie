@@ -13,7 +13,8 @@ For a **new machine or empty database**:
 3. **First user** – Open the app → you’ll be sent to **Setup** or **Login**. Register the first account (it becomes admin). No seed data required.
 
 Schema reference: `db/schema.sql`. Check migration files: `npm run migrate:check`.  
-Step-by-step: **`docs/FRESH_INSTALL_CHECKLIST.md`**.
+Step-by-step: **`docs/FRESH_INSTALL_CHECKLIST.md`**.  
+**New install on Windows (end user):** **`docs/WINDOWS_INSTALL.md`** — Postgres 17, VC++ Redist, DB env, install & run.
 
 ## Running with local Postgres
 

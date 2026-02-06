@@ -1,6 +1,6 @@
 {
   "name": "zet_asociatie",
-  "version": "0.1.18",
+  "version": "0.1.20",
   "description": "Aplicatie de administrare membri",
   "author": "Zet Securty",
   "private": true,
@@ -130,12 +130,16 @@
       {
         "from": "resources/Postgres",
         "to": "Postgres",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/RebuilderC",
         "to": "RebuilderC",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asarUnpack": [
