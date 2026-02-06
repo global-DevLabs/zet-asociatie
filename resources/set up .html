@@ -1,0 +1,104 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.7">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 13.0px Helvetica}
+    p.p3 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+  </style>
+</head>
+<body>
+<p class="p1"><br></p>
+<p class="p2"># New install on Windows</p>
+<p class="p1"><br></p>
+<p class="p3">Follow these steps to set up **Admin Membri** on a Windows PC from scratch.</p>
+<p class="p1"><br></p>
+<p class="p1"><br></p>
+<p class="p3">Install the app and go to the application folder to find dependencies.</p>
+<p class="p3">C:\Program Files\Admin Membri\resources<span class="Apple-converted-space"> </span></p>
+<p class="p1"><br></p>
+<p class="p3">---</p>
+<p class="p1"><br></p>
+<p class="p3">## 1. Install PostgreSQL 17</p>
+<p class="p1"><br></p>
+<p class="p3">1. Download **PostgreSQL 17** for Windows (x64): <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">   </span>[https://www.postgresql.org/download/windows/](https://www.postgresql.org/download/windows/) or [EnterpriseDB](https://www.enterprise-db.com/downloads/postgres-postgresql-downloads).</p>
+<p class="p3">2. Run the installer.</p>
+<p class="p3">3. During setup, set and remember the **postgres** user password (e.g. `Zet2026`).</p>
+<p class="p3">4. Keep the default port **5432** unless you need another.</p>
+<p class="p3">5. Finish the installation. PostgreSQL will run as a Windows service.</p>
+<p class="p1"><br></p>
+<p class="p3">---</p>
+<p class="p1"><br></p>
+<p class="p3">## 2. Install Visual C++ Redistributable (x64)</p>
+<p class="p1"><br></p>
+<p class="p3">The app needs the **Microsoft Visual C++ Redistributable** to run.</p>
+<p class="p1"><br></p>
+<p class="p3">1. Download **VC_redist.x64.exe**: <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">   </span>[https://aka.ms/vs/17/release/vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe) <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">   </span>(or use the copy included in the app’s `resources/RebuilderC/` folder if you have it.)</p>
+<p class="p3">2. Run the installer and complete the setup.</p>
+<p class="p1"><br></p>
+<p class="p3">---</p>
+<p class="p1"><br></p>
+<p class="p3">## 3. Set database environment and details</p>
+<p class="p1"><br></p>
+<p class="p3">Before the **first run** of Admin Membri, tell the app how to connect to your PostgreSQL.</p>
+<p class="p1"><br></p>
+<p class="p3">**Connection URL format:** <span class="Apple-converted-space"> </span></p>
+<p class="p3">`postgres://postgres:YOUR_PASSWORD@127.0.0.1:5432/postgres`</p>
+<p class="p1"><br></p>
+<p class="p3">Replace `YOUR_PASSWORD` with the postgres password you set in step 1. If you use another user, host, or port, change those in the URL.</p>
+<p class="p1"><br></p>
+<p class="p3">**How to set it on Windows:**</p>
+<p class="p1"><b></b><br></p>
+<p class="p3"><b>- **Option A – System environment (permanent)** <span class="Apple-converted-space"> </span></b><b></b></p>
+<p class="p3"><span class="Apple-converted-space">  </span>1. Press **Win + R**, type `sysdm.cpl`, press Enter. <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">  </span>2. Go to **Advanced** → **Environment Variables**. <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">  </span>3. Under **User variables** (or **System variables**), click **New**. <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">  </span>4. Variable name: `LOCAL_DB_URL` <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">  </span>5. Variable value: `postgres://postgres:Zet2026@127.0.0.1:5432/postgres` (use your password). <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">  </span>6. OK out. Restart the app (or log off and back on) so it sees the variable.</p>
+<p class="p1"><br></p>
+<p class="p3">- **Option B – Batch file (per run)** <span class="Apple-converted-space"> </span></p>
+<p class="p3"><span class="Apple-converted-space">  </span>Create a text file, e.g. `Start Admin Membri.bat`, with:</p>
+<p class="p3"><span class="Apple-converted-space">  </span>```bat</p>
+<p class="p3"><span class="Apple-converted-space">  </span>set LOCAL_DB_URL=postgres://postgres:Zet2026@127.0.0.1:5432/postgres</p>
+<p class="p3"><span class="Apple-converted-space">  </span>"C:\Program Files\Admin Membri\Admin Membri.exe"</p>
+<p class="p3"><span class="Apple-converted-space">  </span>```</p>
+<p class="p3"><span class="Apple-converted-space">  </span>Replace the path if you installed the app elsewhere. Save, then double‑click the `.bat` file to start the app.</p>
+<p class="p1"><br></p>
+<p class="p3">On first launch, the app will create the database `zet_asociatie`, the role `zet_app`, run migrations, and save config to `%APPDATA%\Admin Membri\`. After that you can start the app normally; you only need `LOCAL_DB_URL` for the first run (or after deleting the config).</p>
+<p class="p1"><br></p>
+<p class="p3">---</p>
+<p class="p1"><br></p>
+<p class="p3">## 4. Install the app</p>
+<p class="p1"><br></p>
+<p class="p3">1. Get the Windows installer (e.g. `Admin Membri Setup x.x.x.exe`) from your admin or build pipeline.</p>
+<p class="p3">2. Run the installer.</p>
+<p class="p3">3. Follow the steps (choose install location if needed, then finish).</p>
+<p class="p3">4. Do **not** run the app as Administrator (right‑click → “Run as administrator”). Use a normal user account.</p>
+<p class="p1"><br></p>
+<p class="p3">---</p>
+<p class="p1"><br></p>
+<p class="p3">## 5. Run the app</p>
+<p class="p1"><br></p>
+<p class="p3">1. Start **Admin Membri** from the Start Menu or desktop shortcut (or your `.bat` file if you use Option B above).</p>
+<p class="p3">2. Wait a few seconds for the window to load. If the window is blank, wait 10–15 seconds and press **Ctrl + R** to refresh, or open a browser and go to **http://localhost:3000**.</p>
+<p class="p3">3. On first run you will be sent<span class="Apple-converted-space"> </span></p>
+<p class="p3">to **Setup**. Create the first admin account (email + password).</p>
+<p class="p3">4. Log in and use the app.</p>
+<p class="p1"><br></p>
+<p class="p3">**If the app closes immediately:** open `%APPDATA%\Admin Membri\debug.log` in Notepad to see the error. <span class="Apple-converted-space"> </span></p>
+<p class="p3">**More help:** see `electron/README-electron.md` (troubleshooting, external Postgres, NSIS, etc.).</p>
+<p class="p1"><br></p>
+<p class="p1"><br></p>
+<p class="p3">For help contact support@devlabs.ro</p>
+<p class="p1"><br></p>
+</body>
+</html>

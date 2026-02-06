@@ -1,6 +1,6 @@
 {
   "name": "zet_asociatie",
-  "version": "0.1.20",
+  "version": "1.0.0",
   "description": "Aplicatie de administrare membri",
   "author": "Zet Securty",
   "private": true,
@@ -140,6 +140,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/set up .html",
+        "to": "Setup.html"
       }
     ],
     "asarUnpack": [

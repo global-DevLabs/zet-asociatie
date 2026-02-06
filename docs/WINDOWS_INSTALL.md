@@ -2,6 +2,9 @@
 
 Follow these steps to set up **Admin Membri** on a Windows PC from scratch.
 
+**Setup guide in the app:** After installing, you can open the same guide from the application folder:  
+`C:\Program Files\Admin Membri\resources\Setup.html` (double‑click to open in your browser).
+
 ---
 
 ## 1. Install PostgreSQL 17

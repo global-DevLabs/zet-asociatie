@@ -132,7 +132,10 @@ function createMainWindow() {
   const baseUrl = getAppBaseUrl();
   const urlToLoad = `${baseUrl}${LOGIN_PATH}`;
   win.loadURL(urlToLoad);
-  win.once("ready-to-show", () => win.show());
+  win.once("ready-to-show", () => {
+    win.maximize();
+    win.show();
+  });
 }
 
 /** Returns a promise that resolves with a free port on 127.0.0.1 (e.g. 3000, 3001, ...). */
