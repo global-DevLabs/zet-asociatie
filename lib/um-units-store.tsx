@@ -1,10 +1,10 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
-import { createBrowserClient } from "@/lib/supabase/client"
 import type { UMUnit } from "@/types"
 import { useToast } from "@/hooks/use-toast"
 import { AuditLogger } from "@/lib/audit-logger"
+import { umUnitsApi } from "@/lib/db-adapter"
 
 interface UMUnitsContextType {
   units: UMUnit[]
@@ -25,20 +25,7 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
   const [units, setUnits] = useState<UMUnit[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [supabase, setSupabase] = useState<ReturnType<typeof createBrowserClient> | null>(null)
   const { toast } = useToast()
-
-  // Initialize Supabase client on mount
-  useEffect(() => {
-    try {
-      const client = createBrowserClient()
-      setSupabase(client)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to initialize Supabase"
-      setError(message)
-      setLoading(false)
-    }
-  }, [])
 
   // Format UM code to standard format: "UM 0754"
   const formatUMCode = useCallback((input: string): string => {
@@ -64,37 +51,24 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const loadUnits = useCallback(async () => {
-    if (!supabase) return
-
     try {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await supabase
-        .from("um_units")
-        .select("*")
-        .eq("is_active", true)
-        .order("code", { ascending: true })
-
-      if (fetchError) {
-        console.error(" Failed to load UM units:", fetchError)
-        setError(fetchError.message)
-        toast({
-          title: "Eroare",
-          description: "Nu s-au putut încărca unitățile militare.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      setUnits(data || [])
+      const data = await umUnitsApi.fetchUnits()
+      setUnits(data)
     } catch (err) {
-      console.error(" Error loading UM units:", err)
-      setError("Failed to load units")
+      console.error(" Failed to load UM units:", err)
+      setError(err instanceof Error ? err.message : "Failed to load units")
+      toast({
+        title: "Eroare",
+        description: "Nu s-au putut încărca unitățile militare.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
-  }, [supabase, toast])
+  }, [toast])
 
   useEffect(() => {
     loadUnits()
@@ -106,100 +80,56 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
 
   const addUnit = useCallback(
     async (code: string, name?: string): Promise<{ success: boolean; error?: string; unit?: UMUnit }> => {
-      if (!supabase) {
-        return {
-          success: false,
-          error: "Supabase client not initialized",
-        }
-      }
       try {
         const formattedCode = formatUMCode(code)
 
-        // Check for duplicates
         const existing = units.find((u) => u.code.toUpperCase() === formattedCode.toUpperCase())
         if (existing) {
-          return {
-            success: false,
-            error: "Acest cod UM există deja.",
-          }
+          return { success: false, error: "Acest cod UM există deja." }
         }
 
-        const newUnit = {
-          code: formattedCode,
-          name: name?.trim() || null,
-          is_active: true,
+        const unit = await umUnitsApi.addUnit(formattedCode, name?.trim())
+        if (!unit) {
+          return { success: false, error: "Nu s-a putut adăuga UM-ul." }
         }
 
-        const { data, error: insertError } = await supabase.from("um_units").insert(newUnit).select()
-
-        // Check for actual insert failure
-        if (insertError) {
-          console.error("Failed to add UM unit:", insertError)
-          return {
-            success: false,
-            error: insertError.message,
-          }
-        }
-
-        // Get the inserted unit (data is an array)
-        const insertedUnit = data && data.length > 0 ? data[0] : null
-
-        // Refresh to ensure consistency
         await refreshUnits()
 
-        // Audit log
         AuditLogger.log({
-          user: null, // TODO: Get current user from auth context
-          actionType: "create",
+          user: null,
+          actionType: "UPDATE_VALUE_LIST",
           module: "settings",
           entityType: "um_unit",
-          entityId: insertedUnit?.id,
+          entityId: unit.id,
           summary: `Adăugat UM: ${formattedCode}`,
           metadata: { code: formattedCode, name },
         })
 
-        toast({
-          title: "UM adăugat",
-          description: `${formattedCode} a fost adăugat cu succes.`,
-        })
+        toast({ title: "UM adăugat", description: `${formattedCode} a fost adăugat cu succes.` })
 
-        return {
-          success: true,
-          unit: insertedUnit || undefined,
-        }
+        return { success: true, unit }
       } catch (err) {
         console.error(" Error adding UM unit:", err)
-        return {
-          success: false,
-          error: "Eroare la adăugarea UM-ului",
-        }
+        return { success: false, error: "Eroare la adăugarea UM-ului" }
       }
     },
-    [supabase, units, formatUMCode, refreshUnits, toast],
+    [units, formatUMCode, refreshUnits, toast],
   )
 
   const updateUnit = useCallback(
     async (id: string, updates: Partial<UMUnit>): Promise<boolean> => {
-      if (!supabase) return false
       try {
-        const { error: updateError } = await supabase.from("um_units").update(updates).eq("id", id)
-
-        if (updateError) {
-          console.error(" Failed to update UM unit:", updateError)
-          toast({
-            title: "Eroare",
-            description: "Nu s-a putut actualiza UM-ul.",
-            variant: "destructive",
-          })
+        const ok = await umUnitsApi.updateUnit(id, updates)
+        if (!ok) {
+          toast({ title: "Eroare", description: "Nu s-a putut actualiza UM-ul.", variant: "destructive" })
           return false
         }
 
         await refreshUnits()
 
-        // Audit log
         AuditLogger.log({
-          user: null, // TODO: Get current user from auth context
-          actionType: "update",
+          user: null,
+          actionType: "UPDATE_VALUE_LIST",
           module: "settings",
           entityType: "um_unit",
           entityId: id,
@@ -207,45 +137,33 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
           metadata: updates,
         })
 
-        toast({
-          title: "UM actualizat",
-          description: "Modificările au fost salvate.",
-        })
-
+        toast({ title: "UM actualizat", description: "Modificările au fost salvate." })
         return true
       } catch (err) {
         console.error(" Error updating UM unit:", err)
         return false
       }
     },
-    [supabase, refreshUnits, toast],
+    [refreshUnits, toast],
   )
 
   const deleteUnit = useCallback(
     async (id: string): Promise<boolean> => {
-      if (!supabase) return false
       try {
         const unit = units.find((u) => u.id === id)
         if (!unit) return false
 
-        const { error: deleteError } = await supabase.from("um_units").delete().eq("id", id)
-
-        if (deleteError) {
-          console.error(" Failed to delete UM unit:", deleteError)
-          toast({
-            title: "Eroare",
-            description: "Nu s-a putut șterge UM-ul.",
-            variant: "destructive",
-          })
+        const ok = await umUnitsApi.deleteUnit(id)
+        if (!ok) {
+          toast({ title: "Eroare", description: "Nu s-a putut șterge UM-ul.", variant: "destructive" })
           return false
         }
 
         await refreshUnits()
 
-        // Audit log
         AuditLogger.log({
-          user: null, // TODO: Get current user from auth context
-          actionType: "delete",
+          user: null,
+          actionType: "UPDATE_VALUE_LIST",
           module: "settings",
           entityType: "um_unit",
           entityId: id,
@@ -253,18 +171,14 @@ export function UMUnitsProvider({ children }: { children: ReactNode }) {
           metadata: { code: unit.code },
         })
 
-        toast({
-          title: "UM șters",
-          description: `${unit.code} a fost șters.`,
-        })
-
+        toast({ title: "UM șters", description: `${unit.code} a fost șters.` })
         return true
       } catch (err) {
         console.error(" Error deleting UM unit:", err)
         return false
       }
     },
-    [supabase, units, refreshUnits, toast],
+    [units, refreshUnits, toast],
   )
 
   const toggleUnitStatus = useCallback(

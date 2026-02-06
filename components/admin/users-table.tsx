@@ -8,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -22,6 +21,8 @@ import { Shield, Pencil, Eye } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { profilesApi } from "@/lib/db-adapter";
+import { isTauri } from "@/lib/db";
 
 interface UserProfile {
   id: string;
@@ -46,29 +47,28 @@ export function UsersTable({ data, onRoleChanged }: UsersTableProps) {
     try {
       setUpdatingUserId(userId);
 
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: newRole }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update role");
+      if (isTauri()) {
+        const ok = await profilesApi.updateProfile(userId, { role: newRole as "admin" | "editor" | "viewer" });
+        if (!ok) throw new Error("Failed to update role");
+      } else {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: newRole }),
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to update role");
+        }
       }
 
-      toast({
-        title: "Success",
-        description: "User role updated successfully",
-      });
-
+      toast({ title: "Success", description: "User role updated successfully" });
       onRoleChanged();
     } catch (error) {
       console.error("Error updating role:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to update role",
+        description: error instanceof Error ? error.message : "Failed to update role",
         variant: "destructive",
       });
     } finally {
@@ -80,29 +80,31 @@ export function UsersTable({ data, onRoleChanged }: UsersTableProps) {
     try {
       setUpdatingUserId(userId);
 
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: isActive }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update status");
+      if (isTauri()) {
+        const ok = await profilesApi.updateProfile(userId, { is_active: isActive });
+        if (!ok) throw new Error("Failed to update status");
+      } else {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: isActive }),
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to update status");
+        }
       }
 
       toast({
         title: "Success",
         description: `User ${isActive ? "activated" : "deactivated"} successfully`,
       });
-
       onRoleChanged();
     } catch (error) {
       console.error("Error updating status:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to update status",
+        description: error instanceof Error ? error.message : "Failed to update status",
         variant: "destructive",
       });
     } finally {

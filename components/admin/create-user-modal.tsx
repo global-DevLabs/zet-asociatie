@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/select";
 import { Shield, Pencil, Eye, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { profilesApi } from "@/lib/db-adapter";
+import { isTauri } from "@/lib/db";
 
 interface CreateUserModalProps {
   open: boolean;
@@ -89,22 +91,27 @@ export function CreateUserModal({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      if (isTauri()) {
+        await profilesApi.createProfile({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name || undefined,
+          role: formData.role,
+        });
+      } else {
+        const response = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to create user");
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to create user");
+        }
       }
 
-      toast({
-        title: "Success",
-        description: "User created successfully",
-      });
-
+      toast({ title: "Success", description: "User created successfully" });
       onUserCreated();
       handleClose();
     } catch (error) {

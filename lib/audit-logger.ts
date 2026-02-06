@@ -1,5 +1,5 @@
 import type { AuditLog, AuditActionType, AuditModule, User } from "@/types"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { auditLogsApi } from "@/lib/db-adapter"
 
 // Get browser info safely
 function getBrowserInfo() {
@@ -73,14 +73,10 @@ export class AuditLogger {
   }): Promise<void> {
     try {
       const browserInfo = getBrowserInfo()
-      const supabase = createBrowserClient()
-
-      // Mask sensitive data in metadata
       const safeMetadata = params.metadata ? maskSensitiveData(params.metadata) : undefined
 
-      const auditLog = {
+      const ok = await auditLogsApi.log({
         id: this.generateId(),
-        timestamp: new Date().toISOString(),
         actor_user_id: params.user?.id || "anonymous",
         actor_name: params.user ? `${params.user.firstName} ${params.user.lastName}` : "Anonymous",
         actor_role: params.user?.role || "viewer",
@@ -94,12 +90,10 @@ export class AuditLogger {
         user_agent: browserInfo.userAgent,
         request_id: this.generateRequestId(),
         is_error: params.isError || false,
-      }
+      })
 
-      const { error } = await supabase.from("audit_logs").insert(auditLog)
-
-      if (error) {
-        console.warn("Failed to insert audit log:", error)
+      if (!ok) {
+        console.warn("Failed to insert audit log")
       }
     } catch (error) {
       console.warn("Failed to write audit log:", error)
@@ -108,35 +102,7 @@ export class AuditLogger {
 
   static async getLogs(limit: number = 100): Promise<AuditLog[]> {
     try {
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("*")
-        .order("timestamp", { ascending: false })
-        .limit(limit)
-
-      if (error) {
-        console.warn("Failed to fetch audit logs:", error)
-        return []
-      }
-
-      return (data || []).map((row) => ({
-        id: row.id,
-        timestamp: row.timestamp,
-        actorUserId: row.actor_user_id,
-        actorName: row.actor_name,
-        actorRole: row.actor_role,
-        actionType: row.action_type,
-        module: row.module,
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        entityCode: row.entity_code,
-        summary: row.summary,
-        metadata: row.metadata,
-        userAgent: row.user_agent,
-        requestId: row.request_id,
-        isError: row.is_error,
-      }))
+      return await auditLogsApi.getLogs(limit)
     } catch {
       return []
     }

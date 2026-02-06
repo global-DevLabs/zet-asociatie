@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2/capability",
+  "identifier": "default",
+  "description": "Default permissions for Zet Asociatie",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "sql:default",
+    "sql:allow-load",
+    "sql:allow-select",
+    "sql:allow-execute",
+    "sql:allow-close"
+  ]
+}

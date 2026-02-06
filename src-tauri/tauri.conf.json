@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Zet Asociatie",
+  "version": "0.1.0",
+  "identifier": "com.zet-asociatie.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "node scripts/tauri-build.js",
+    "frontendDist": "../out"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Zet Asociatie",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [],
+    "shortDescription": "Asociație militară - gestionare membri, plăți, activități",
+    "longDescription": "Aplicație desktop standalone pentru gestionarea membrilor asociației, plăților și activităților."
+  },
+  "plugins": {
+    "sql": {
+      "preload": ["sqlite:zet_asociatie.db"]
+    }
+  }
+}

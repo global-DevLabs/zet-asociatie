@@ -28,3 +28,6 @@ next-env.d.ts
 
 # cursor
 .cursor/
+
+# Tauri build temp (API/auth routes moved during static export)
+.tauri-build-hide/

@@ -15,6 +15,8 @@ import { Upload, FileText, AlertCircle, CheckCircle2, Loader2 } from "lucide-rea
 import { toast } from "sonner"
 import { parseCSV, validateMemberData, type ImportResult } from "@/lib/import-utils"
 import { useMembers } from "@/lib/members-store"
+import { membersApi } from "@/lib/db-adapter"
+import { isTauri } from "@/lib/db"
 
 interface ImportModalProps {
   open: boolean
@@ -71,19 +73,25 @@ export function ImportModal({ open, onOpenChange }: ImportModalProps) {
     setIsImporting(true)
 
     try {
-      const response = await fetch("/api/members/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ members: parseResult.validMembers }),
-      })
+      if (isTauri()) {
+        const { imported, error } = await membersApi.importMembers(parseResult.validMembers)
+        if (error) throw new Error(error)
+        toast.success(`Import finalizat: ${imported} membri adăugați`)
+      } else {
+        const response = await fetch("/api/members/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ members: parseResult.validMembers }),
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || "Import failed")
+        if (!response.ok) {
+          throw new Error(data.error || "Import failed")
+        }
+
+        toast.success(`Import finalizat: ${data.imported} membri adăugați`)
       }
-
-      toast.success(`Import finalizat: ${data.imported} membri adăugați`)
       
       // Refresh the members list
       await refreshMembers()

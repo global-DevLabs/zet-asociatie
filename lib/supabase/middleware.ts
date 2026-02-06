@@ -6,6 +6,11 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
+  // Tauri app: auth is local (SQLite + localStorage). Skip Supabase auth check.
+  if (process.env.TAURI_ENV_PLATFORM) {
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

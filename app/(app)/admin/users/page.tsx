@@ -10,6 +10,8 @@ import { useAuth } from "@/lib/auth-context";
 import { UsersTable } from "@/components/admin/users-table";
 import { CreateUserModal } from "@/components/admin/create-user-modal";
 import { useToast } from "@/hooks/use-toast";
+import { profilesApi } from "@/lib/db-adapter";
+import { isTauri } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -48,15 +50,18 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/admin/users");
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch users");
+      if (isTauri()) {
+        const profiles = await profilesApi.fetchProfiles();
+        setUsers(profiles);
+      } else {
+        const response = await fetch("/api/admin/users");
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to fetch users");
+        }
+        const data = await response.json();
+        setUsers(data.users || []);
       }
-
-      const data = await response.json();
-      setUsers(data.users || []);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({

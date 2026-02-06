@@ -11,6 +11,8 @@ import {
 import { useRouter } from "next/navigation";
 import type { User, UserRole } from "@/types";
 import { AuditLogger } from "@/lib/audit-logger";
+import { authApi } from "@/lib/db-adapter";
+import { isTauri } from "@/lib/db";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 interface AuthContextType {
@@ -83,27 +85,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    const supabase = supabaseRef.current;
 
     async function init() {
       try {
-        // Use getUser() instead of getSession() to get fresh data from server
-        const {
-          data: { user: authUser },
-          error,
-        } = await supabase.auth.getUser();
+        if (isTauri()) {
+          // Local auth: restore session from localStorage or show login
+          const profileId = authApi.getSessionProfileId();
+          if (profileId) {
+            const profile = await authApi.fetchProfileById(profileId);
+            if (profile && mounted) {
+              setUser(profile);
+            }
+          }
+        } else {
+          const supabase = supabaseRef.current;
+          const {
+            data: { user: authUser },
+            error,
+          } = await supabase.auth.getUser();
 
-        if (error) {
-          // Auth error is expected when not logged in, don't log as error
-          if (error.message !== "Auth session missing!") {
+          if (error && error.message !== "Auth session missing!") {
             console.error("Auth check error:", error);
           }
-        }
 
-        if (authUser && mounted) {
-          const profile = await fetchProfile(authUser.id, authUser.email || "");
-          if (mounted) {
-            setUser(profile);
+          if (authUser && mounted) {
+            const profile = await fetchProfile(authUser.id, authUser.email || "");
+            if (mounted) setUser(profile);
           }
         }
       } catch (err) {
@@ -116,10 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Safety timeout
     const timeoutId = setTimeout(() => {
       if (mounted && loadingRef.current) {
-        console.warn("Auth check timed out after 3s");
         loadingRef.current = false;
         setIsLoading(false);
       }
@@ -127,39 +132,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     init();
 
-    // Auth state listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      if (
-        (event === "SIGNED_IN" ||
-          event === "TOKEN_REFRESHED" ||
-          event === "INITIAL_SESSION") &&
-        session?.user
-      ) {
-        const profile = await fetchProfile(
-          session.user.id,
-          session.user.email || ""
-        );
-        if (mounted) {
-          setUser(profile);
-          // Ensure loading is false after auth state resolves
-          if (loadingRef.current) {
-            loadingRef.current = false;
-            setIsLoading(false);
+    if (!isTauri()) {
+      const supabase = supabaseRef.current;
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted) return;
+        if (
+          (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") &&
+          session?.user
+        ) {
+          const profile = await fetchProfile(session.user.id, session.user.email || "");
+          if (mounted) {
+            setUser(profile);
+            if (loadingRef.current) {
+              loadingRef.current = false;
+              setIsLoading(false);
+            }
           }
+        } else if (event === "SIGNED_OUT") {
+          setUser(null);
         }
-      } else if (event === "SIGNED_OUT") {
-        setUser(null);
-      }
-    });
+      });
+      return () => {
+        mounted = false;
+        clearTimeout(timeoutId);
+        subscription.unsubscribe();
+      };
+    }
 
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -168,11 +172,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      if (isTauri()) {
+        const profile = await authApi.loginLocal(email, password);
+        if (!profile) {
+          AuditLogger.log({
+            user: null,
+            actionType: "LOGIN_FAILED",
+            module: "auth",
+            summary: `Failed login attempt for ${email}`,
+            metadata: { email },
+            isError: true,
+          });
+          return { success: false, error: "Email sau parolă incorectă" };
+        }
+        authApi.setSessionProfileId(profile.id);
+        setUser(profile);
+        AuditLogger.log({
+          user: profile,
+          actionType: "LOGIN",
+          module: "auth",
+          summary: `${profile.firstName} ${profile.lastName} logged in`,
+        });
+        return { success: true };
+      }
+
       const supabase = supabaseRef.current;
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
         AuditLogger.log({
@@ -186,22 +211,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: error.message };
       }
 
-      if (!data.user) {
-        return { success: false, error: "No user returned" };
-      }
+      if (!data.user) return { success: false, error: "No user returned" };
 
-      // Directly fetch and set the user profile instead of waiting for onAuthStateChange
-      // This ensures the UI updates immediately after successful login
       const profile = await fetchProfile(data.user.id, data.user.email || "");
       setUser(profile);
-
       AuditLogger.log({
         user: profile,
         actionType: "LOGIN",
         module: "auth",
         summary: `${profile.firstName} ${profile.lastName} logged in`,
       });
-
       return { success: true };
     } catch (err) {
       console.error("Login error:", err);
@@ -219,11 +238,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    try {
-      const supabase = createBrowserClient();
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error("Logout error:", err);
+    if (isTauri()) {
+      authApi.setSessionProfileId(null);
+    } else {
+      try {
+        const supabase = createBrowserClient();
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Logout error:", err);
+      }
     }
 
     setUser(null);
